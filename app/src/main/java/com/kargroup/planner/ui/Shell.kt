@@ -194,10 +194,11 @@ internal fun StatsRow(tasks: List<TaskEntity>, today: String, onNavigate: (Scree
         // 4 across when there is room, otherwise a 2 x 2 grid - never scrolls sideways.
         val perRow = if (maxWidth >= 760.dp) 4 else 2
         val gap = if (perRow == 4) 14.dp else 10.dp
+        val compactCards = perRow == 2 && maxWidth < 420.dp
         Column(verticalArrangement = Arrangement.spacedBy(gap)) {
             cards.chunked(perRow).forEach { rowCards ->
                 Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    rowCards.forEach { StatCard(it, Modifier.weight(1f), compact = perRow == 2 && maxWidth < 420.dp, onNavigate) }
+                    rowCards.forEach { StatCard(it, Modifier.weight(1f), compactCards, onNavigate) }
                 }
             }
         }
