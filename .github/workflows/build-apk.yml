@@ -1,0 +1,55 @@
+name: Build KAR Planner APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew assembleRelease 2>&1 | tee build.log
+          cp app/build/outputs/apk/release/app-release.apk KAR-Planner.apk
+
+      - name: Show build errors
+        if: failure()
+        run: |
+          grep -E "^e: |error:" build.log | sed 's#file:///home/runner/work/[^/]*/[^/]*/##' | head -40 > errors.txt || true
+          while IFS= read -r line; do echo "::error::$line"; done < errors.txt
+          {
+            echo "## Build errors"
+            echo '```'
+            cat errors.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APK (Actions artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAR-Planner-apk
+          path: KAR-Planner.apk
+
+      - name: Publish APK as a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: KAR Planner build ${{ github.run_number }}
+          body: Download **KAR-Planner.apk** below on your Android tablet and tap it to install.
+          files: KAR-Planner.apk
