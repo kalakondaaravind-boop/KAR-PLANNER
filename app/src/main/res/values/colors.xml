@@ -1,0 +1,8 @@
+<resources>
+    <color name="kar_navy">#0B1E3F</color>
+    <color name="kar_gold">#F5A623</color>
+    <color name="kar_surface">#F0F7FF</color>
+    <color name="kar_sky_deep">#0284C7</color>
+    <color name="kar_white">#FFFFFF</color>
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>

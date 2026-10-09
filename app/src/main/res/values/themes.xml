@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.KarPlanner" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/kar_white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/kar_sky_deep</item>
+        <item name="android:windowBackground">@color/kar_surface</item>
+    </style>
+</resources>
