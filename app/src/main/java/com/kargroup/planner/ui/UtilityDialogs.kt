@@ -216,6 +216,7 @@ fun DeleteAllDialog(
                         CountRow("Projects", c?.projects)
                         CountRow("Minutes of Meeting", c?.meetings)
                         CountRow("Journal entries", c?.journal)
+                        CountRow("People", c?.persons)
                     }
                 }
                 Spacer(Modifier.size(12.dp))

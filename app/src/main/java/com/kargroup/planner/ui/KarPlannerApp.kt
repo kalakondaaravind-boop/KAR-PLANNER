@@ -102,6 +102,7 @@ import com.kargroup.planner.data.MeetingMinuteEntity
 import com.kargroup.planner.data.ProjectEntity
 import com.kargroup.planner.data.TaskEntity
 import com.kargroup.planner.data.TaskStatus
+import com.kargroup.planner.data.PersonEntity
 import com.kargroup.planner.reminders.Reminders
 import com.kargroup.planner.ui.components.KarEmblem
 import com.kargroup.planner.ui.components.KarLogo
@@ -123,6 +124,10 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
     val contexts by vm.contexts.collectAsStateWithLifecycle()
     val meetings by vm.meetings.collectAsStateWithLifecycle()
     val journal by vm.journal.collectAsStateWithLifecycle()
+    val persons by vm.persons.collectAsStateWithLifecycle()
+    var personDialog by remember { mutableStateOf<PersonEntity?>(null) }
+    var showPersonDialog by remember { mutableStateOf(false) }
+    var deletePersonRequest by remember { mutableStateOf<PersonEntity?>(null) }
     val screen by vm.screen.collectAsStateWithLifecycle()
     val drillRootId by vm.drillRootId.collectAsStateWithLifecycle()
     val showCompleted by vm.showCompleted.collectAsStateWithLifecycle()
@@ -338,6 +343,10 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                     }
                     Screen.People -> PeopleScreen(
                         tasks = tasks,
+                        persons = persons,
+                        onAdd = { personDialog = null; showPersonDialog = true },
+                        onEdit = { personDialog = it; showPersonDialog = true },
+                        onDelete = { deletePersonRequest = it },
                         today = today,
                         wide = wide,
                         header = header,
@@ -488,13 +497,36 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
         AddTaskDialog(
             request = req,
             projects = projects,
-            assigneeSuggestions = assigneeNames,
+            people = persons,
+            onAddPerson = { vm.savePerson(it, null) },
             existingSubtasks = req.existing?.let { index.children(it.id).sortedWith(childOrder) } ?: emptyList(),
             onDismiss = { taskDialog = null },
             onSave = { task, completed, subs, removed ->
                 vm.saveTask(task, isNew = req.existing == null, wantCompleted = completed, subtasks = subs, removedSubtaskIds = removed)
                 taskDialog = null
             },
+        )
+    }
+
+    if (showPersonDialog) {
+        val editing = personDialog
+        PersonDialog(
+            existing = editing,
+            takenNames = persons.map { it.name },
+            onDismiss = { showPersonDialog = false },
+            onSave = { vm.savePerson(it, editing?.name); showPersonDialog = false },
+        )
+    }
+
+    deletePersonRequest?.let { p ->
+        val count = tasks.count { !it.done && sameAssignee(it.assignee, p.name) }
+        ConfirmDialog(
+            title = "Remove ${p.name}?",
+            message = if (count > 0) "${p.name} has $count open activit${if (count == 1) "y" else "ies"}. They will become unassigned." else "${p.name} will be removed from the people list.",
+            confirmLabel = "Remove",
+            destructive = true,
+            onConfirm = { vm.deletePerson(p); deletePersonRequest = null },
+            onDismiss = { deletePersonRequest = null },
         )
     }
 
@@ -513,6 +545,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
         MeetingEditorDialog(
             existing = if (isTemplate) null else req.meeting,
             projects = projects,
+            people = persons,
             defaultProjectId = if (isTemplate) req.meeting?.projectId else null,
             onDismiss = { meetingEditor = null },
             onSave = { vm.saveMeeting(it); meetingEditor = null },

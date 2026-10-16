@@ -22,6 +22,19 @@ object BackupCodec {
             .put("projects", JSONArray().apply { s.projects.forEach { put(projectToJson(it)) } })
             .put("contexts", JSONArray().apply { s.contexts.forEach { put(contextToJson(it)) } })
             .put("meeting_minutes", JSONArray().apply { s.meetings.forEach { put(meetingToJson(it)) } })
+            .put("persons", JSONArray().apply {
+                s.persons.forEach { p ->
+                    put(
+                        JSONObject()
+                            .put("id", p.id)
+                            .put("name", p.name)
+                            .put("role", p.role ?: JSONObject.NULL)
+                            .put("email", p.email ?: JSONObject.NULL)
+                            .put("phone", p.phone ?: JSONObject.NULL)
+                            .put("created_at", p.createdAt)
+                    )
+                }
+            })
             .put("journal", JSONArray().apply {
                 s.journal.forEach { j ->
                     put(
@@ -101,7 +114,23 @@ object BackupCodec {
                 updatedAt = o.optLong("updated_at", System.currentTimeMillis()),
             )
         }
-        return BackupSnapshot(tasks, projects, contexts, meetings, journal)
+        val persons = root.optJSONArray("persons").objects().mapNotNull { o ->
+            val name = o.optStringOrNull("name")?.trim()?.ifBlank { null } ?: return@mapNotNull null
+            PersonEntity(
+                id = o.optStringOrNull("id") ?: newId(),
+                name = name,
+                role = o.optStringOrNull("role"),
+                email = o.optStringOrNull("email"),
+                phone = o.optStringOrNull("phone"),
+                createdAt = o.optLong("created_at", System.currentTimeMillis()),
+            )
+        }.toMutableList()
+        // Older backups: create people from names found on activities.
+        val knownNames = persons.map { it.name.lowercase() }.toMutableSet()
+        tasks.mapNotNull { it.assignee?.trim()?.ifBlank { null } }.forEach { n ->
+            if (knownNames.add(n.lowercase())) persons.add(PersonEntity(name = n))
+        }
+        return BackupSnapshot(tasks, projects, contexts, meetings, journal, persons)
     }
 
     // ---------------------------------------------------------------- encode

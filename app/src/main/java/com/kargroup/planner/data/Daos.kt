@@ -28,6 +28,9 @@ interface TaskDao {
     @Query("DELETE FROM tasks WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)
 
+    @Query("UPDATE tasks SET assignee = :newName WHERE LOWER(TRIM(assignee)) = LOWER(TRIM(:oldName))")
+    suspend fun renameAssignee(oldName: String, newName: String?)
+
     @Query("UPDATE tasks SET status = :status WHERE id = :id")
     suspend fun setStatus(id: String, status: String?)
 
@@ -152,5 +155,29 @@ interface JournalDao {
     suspend fun count(): Int
 
     @Query("DELETE FROM journal_entries")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface PersonDao {
+    @Query("SELECT * FROM persons ORDER BY name COLLATE NOCASE ASC")
+    fun observeAll(): Flow<List<PersonEntity>>
+
+    @Query("SELECT * FROM persons")
+    suspend fun getAll(): List<PersonEntity>
+
+    @Upsert
+    suspend fun upsert(person: PersonEntity)
+
+    @Upsert
+    suspend fun upsertAll(persons: List<PersonEntity>)
+
+    @Query("DELETE FROM persons WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("SELECT COUNT(*) FROM persons")
+    suspend fun count(): Int
+
+    @Query("DELETE FROM persons")
     suspend fun deleteAll()
 }

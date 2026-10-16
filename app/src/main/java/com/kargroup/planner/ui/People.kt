@@ -37,6 +37,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kargroup.planner.data.TaskEntity
+import com.kargroup.planner.data.PersonEntity
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import com.kargroup.planner.data.TaskStatus
 import com.kargroup.planner.ui.components.DepthCard
 import com.kargroup.planner.ui.components.KarBrush
@@ -47,6 +54,7 @@ import com.kargroup.planner.ui.theme.KarColors
 /** Workload summary for one assignee (name == null means unassigned). */
 data class PersonSummary(
     val name: String?,
+    val person: PersonEntity? = null,
     val notStarted: Int,
     val initiated: Int,
     val overdue: Int,
@@ -56,21 +64,26 @@ data class PersonSummary(
     val total: Int get() = open + completed
 }
 
-fun personSummaries(tasks: List<TaskEntity>, today: String): List<PersonSummary> {
+fun personSummaries(tasks: List<TaskEntity>, persons: List<PersonEntity>, today: String): List<PersonSummary> {
     val groups = tasks.groupBy { it.assignee?.trim()?.ifBlank { null }?.lowercase() }
-    return groups.map { (_, list) ->
-        // Show the most common spelling of the name.
-        val display = list.mapNotNull { it.assignee?.trim()?.ifBlank { null } }
+    val byKey = persons.associateBy { it.name.trim().lowercase() }
+    // Everyone in the people list (even with no activities), plus any other names found on activities.
+    val keys = (byKey.keys + groups.keys).distinct()
+    return keys.map { key ->
+        val list = groups[key].orEmpty()
+        val person = key?.let { byKey[it] }
+        val display = person?.name ?: list.mapNotNull { it.assignee?.trim()?.ifBlank { null } }
             .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
         val open = list.filter { !it.done }
         PersonSummary(
             name = display,
+            person = person,
             notStarted = open.count { it.status != TaskStatus.INITIATED },
             initiated = open.count { it.status == TaskStatus.INITIATED },
             overdue = open.count { it.dueDate != null && it.dueDate < today },
             completed = list.count { it.done },
         )
-    }.sortedWith(
+    }.filter { it.name != null || it.total > 0 }.sortedWith(
         compareBy<PersonSummary>({ it.name == null }, { -it.overdue }, { -it.open }, { it.name?.lowercase() ?: "" })
     )
 }
@@ -81,13 +94,17 @@ private val HeaderShape = RoundedCornerShape(16.dp)
 @Composable
 fun PeopleScreen(
     tasks: List<TaskEntity>,
+    persons: List<PersonEntity>,
     today: String,
     wide: Boolean,
     header: @Composable () -> Unit,
     onOpen: (String?) -> Unit,
+    onAdd: () -> Unit,
+    onEdit: (PersonEntity) -> Unit,
+    onDelete: (PersonEntity) -> Unit,
 ) {
     val hPad = if (wide) 24.dp else 12.dp
-    val people = remember(tasks, today) { personSummaries(tasks, today) }
+    val people = remember(tasks, persons, today) { personSummaries(tasks, persons, today) }
     val named = people.count { it.name != null }
 
     LazyVerticalGrid(
@@ -99,35 +116,51 @@ fun PeopleScreen(
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) { header() }
         item(span = { GridItemSpan(maxLineSpan) }) {
-            Column(
+            Row(
                 Modifier
                     .fillMaxWidth()
                     .depthShadow(10.dp, HeaderShape)
                     .background(KarBrush.SkyHeader, HeaderShape)
-                    .padding(horizontal = 18.dp, vertical = 16.dp)
+                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("By Person", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                Text(
-                    "$named ${if (named == 1) "person" else "people"} · tap a card to review their activities",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.85f),
-                )
+                Column(Modifier.weight(1f)) {
+                    Text("By Person", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                    Text(
+                        "$named ${if (named == 1) "person" else "people"} · add people here, then pick them when assigning",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Surface(onClick = onAdd, color = Color.White, shape = RoundedCornerShape(12.dp)) {
+                    Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.PersonAdd, null, tint = KarColors.SkyDeep, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Add Person", color = KarColors.SkyDeep, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
         if (people.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyCard(Icons.Outlined.People, "No activities yet", "Assign activities to people and they will appear here.")
+                EmptyCard(Icons.Outlined.People, "No people yet", "Tap Add Person to build your team list, then assign activities from the drop-down.")
             }
         }
         items(people, key = { it.name?.lowercase() ?: "__unassigned" }) { p ->
-            PersonCard(p) { onOpen(p.name) }
+            PersonCard(p, onEdit = onEdit, onDelete = onDelete) { onOpen(p.name) }
         }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PersonCard(p: PersonSummary, onClick: () -> Unit) {
+private fun PersonCard(
+    p: PersonSummary,
+    onEdit: (PersonEntity) -> Unit,
+    onDelete: (PersonEntity) -> Unit,
+    onClick: () -> Unit,
+) {
     val initials = p.name?.split(" ")?.filter { it.isNotBlank() }?.take(2)?.joinToString("") { it.take(1).uppercase() } ?: "?"
     val avatar = if (p.name == null) KarColors.SlateLight else KarColors.SkyDeep
     DepthCard(modifier = Modifier.fillMaxWidth(), elevation = 5.dp, onClick = onClick) {
@@ -148,7 +181,19 @@ private fun PersonCard(p: PersonSummary, onClick: () -> Unit) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text("${p.open} open · ${p.completed} done", style = MaterialTheme.typography.labelSmall, color = KarColors.Slate)
+                    val role = p.person?.role
+                    Text(
+                        (if (role != null) "$role · " else "") + "${p.open} open · ${p.completed} done",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = KarColors.Slate,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val person = p.person
+                if (person != null) {
+                    IconButton(onClick = { onEdit(person) }) { Icon(Icons.Outlined.Edit, "Edit person", tint = KarColors.Slate) }
+                    IconButton(onClick = { onDelete(person) }) { Icon(Icons.Outlined.Delete, "Remove person", tint = KarColors.Red) }
                 }
             }
             Spacer(Modifier.height(12.dp))

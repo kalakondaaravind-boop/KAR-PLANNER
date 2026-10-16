@@ -136,6 +136,17 @@ data class MeetingMinuteEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
 )
 
+/** A team member activities can be assigned to. Tasks store the person's name. */
+@Entity(tableName = "persons")
+data class PersonEntity(
+    @PrimaryKey val id: String = newId(),
+    @ColumnInfo(name = "name") val name: String,
+    @ColumnInfo(name = "role") val role: String? = null,
+    @ColumnInfo(name = "email") val email: String? = null,
+    @ColumnInfo(name = "phone") val phone: String? = null,
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
+)
+
 /** One personal journal entry per calendar date (IST). */
 @Entity(tableName = "journal_entries", indices = [Index(value = ["entry_date"], unique = true)])
 data class JournalEntry(
@@ -149,7 +160,7 @@ data class JournalEntry(
     @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis(),
 )
 
-data class DataCounts(val tasks: Int, val projects: Int, val contexts: Int, val meetings: Int, val journal: Int = 0)
+data class DataCounts(val tasks: Int, val projects: Int, val contexts: Int, val meetings: Int, val journal: Int = 0, val persons: Int = 0)
 
 data class BackupSnapshot(
     val tasks: List<TaskEntity>,
@@ -157,4 +168,5 @@ data class BackupSnapshot(
     val contexts: List<ContextTagEntity>,
     val meetings: List<MeetingMinuteEntity>,
     val journal: List<JournalEntry> = emptyList(),
+    val persons: List<PersonEntity> = emptyList(),
 )

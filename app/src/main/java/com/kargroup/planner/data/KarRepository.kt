@@ -12,12 +12,48 @@ class KarRepository(private val db: KarDatabase) {
     private val contextDao = db.contextDao()
     private val meetingDao = db.meetingDao()
     private val journalDao = db.journalDao()
+    private val personDao = db.personDao()
 
     val tasks: Flow<List<TaskEntity>> = taskDao.observeAll()
     val projects: Flow<List<ProjectEntity>> = projectDao.observeAll()
     val contexts: Flow<List<ContextTagEntity>> = contextDao.observeAll()
     val meetings: Flow<List<MeetingMinuteEntity>> = meetingDao.observeAll()
     val journal: Flow<List<JournalEntry>> = journalDao.observeAll()
+    val persons: Flow<List<PersonEntity>> = personDao.observeAll()
+
+    // ----------------------------------------------------------------- people
+
+    /** Saves a person; a rename is carried through to their activities and MoM action items. */
+    suspend fun savePerson(person: PersonEntity, oldName: String?) {
+        db.withTransaction {
+            personDao.upsert(person)
+            if (oldName != null && !oldName.equals(person.name, ignoreCase = false)) {
+                taskDao.renameAssignee(oldName, person.name)
+                renameInMeetings(oldName, person.name)
+            }
+        }
+    }
+
+    /** Removes a person; their activities become unassigned. */
+    suspend fun deletePerson(person: PersonEntity) {
+        db.withTransaction {
+            taskDao.renameAssignee(person.name, null)
+            renameInMeetings(person.name, "")
+            personDao.delete(person.id)
+        }
+    }
+
+    private suspend fun renameInMeetings(oldName: String, newName: String) {
+        meetingDao.getAll().forEach { m ->
+            if (m.actionItems.any { it.assignee.trim().equals(oldName.trim(), ignoreCase = true) }) {
+                meetingDao.upsert(
+                    m.copy(actionItems = m.actionItems.map {
+                        if (it.assignee.trim().equals(oldName.trim(), ignoreCase = true)) it.copy(assignee = newName) else it
+                    })
+                )
+            }
+        }
+    }
 
     // ---------------------------------------------------------------- journal
 
@@ -251,12 +287,16 @@ class KarRepository(private val db: KarDatabase) {
         contexts = contextDao.getAll(),
         meetings = meetingDao.getAll(),
         journal = journalDao.getAll(),
+        persons = personDao.getAll(),
     )
 
     /** Merges a backup into the database (records with the same id are replaced). */
     suspend fun importSnapshot(snapshot: BackupSnapshot) {
         db.withTransaction {
             projectDao.upsertAll(snapshot.projects)
+            // People: skip names that already exist (case-insensitive).
+            val known = personDao.getAll().map { it.name.trim().lowercase() }.toMutableSet()
+            snapshot.persons.forEach { p -> if (known.add(p.name.trim().lowercase())) personDao.upsert(p) }
             contextDao.upsertAll(snapshot.contexts)
             meetingDao.upsertAll(snapshot.meetings)
             snapshot.tasks.chunked(300).forEach { taskDao.upsertAll(it) }
@@ -274,6 +314,7 @@ class KarRepository(private val db: KarDatabase) {
         contexts = contextDao.count(),
         meetings = meetingDao.count(),
         journal = journalDao.count(),
+        persons = personDao.count(),
     )
 
     suspend fun deleteAll() {
@@ -283,6 +324,7 @@ class KarRepository(private val db: KarDatabase) {
             contextDao.deleteAll()
             meetingDao.deleteAll()
             journalDao.deleteAll()
+            personDao.deleteAll()
         }
     }
 

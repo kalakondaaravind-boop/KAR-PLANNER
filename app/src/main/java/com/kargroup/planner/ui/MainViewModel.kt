@@ -12,6 +12,7 @@ import com.kargroup.planner.data.MeetingMinuteEntity
 import com.kargroup.planner.data.ProjectEntity
 import com.kargroup.planner.data.TaskEntity
 import com.kargroup.planner.data.JournalEntry
+import com.kargroup.planner.data.PersonEntity
 import com.kargroup.planner.data.TaskStatus
 import com.kargroup.planner.reminders.ReminderNotifications
 import com.kargroup.planner.util.Ist
@@ -60,6 +61,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         repo.contexts.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val meetings: StateFlow<List<MeetingMinuteEntity>> =
         repo.meetings.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val persons: StateFlow<List<PersonEntity>> =
+        repo.persons.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val journal: StateFlow<List<JournalEntry>> =
         repo.journal.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -106,6 +109,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setShowCompleted(value: Boolean) {
         showCompleted.value = value
+    }
+
+    // ----------------------------------------------------------------- people
+
+    fun savePerson(person: PersonEntity, oldName: String?) = viewModelScope.launch {
+        repo.savePerson(person, oldName)
+        toast(if (oldName == null) "${person.name} added" else "${person.name} updated")
+    }
+
+    fun deletePerson(person: PersonEntity) = viewModelScope.launch {
+        if (screen.value == Screen.Person(person.name)) navigate(Screen.People)
+        repo.deletePerson(person)
+        toast("${person.name} removed · their activities are now unassigned")
     }
 
     // ---------------------------------------------------------------- journal

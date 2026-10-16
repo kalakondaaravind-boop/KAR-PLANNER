@@ -75,6 +75,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kargroup.planner.data.QUICK_TASK_MINUTES
 import com.kargroup.planner.data.TaskStatus
+import com.kargroup.planner.data.PersonEntity
 import com.kargroup.planner.data.effectiveStatus
 import androidx.compose.material.icons.outlined.Person
 import com.kargroup.planner.data.Frequency
@@ -118,7 +119,8 @@ private val DayLetters = listOf("M", "T", "W", "T", "F", "S", "S")
 fun AddTaskDialog(
     request: TaskDialogRequest,
     projects: List<ProjectEntity>,
-    assigneeSuggestions: List<String>,
+    people: List<PersonEntity>,
+    onAddPerson: (PersonEntity) -> Unit,
     existingSubtasks: List<TaskEntity> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (task: TaskEntity, completed: Boolean, subtasks: List<SubtaskDraft>, removedSubtaskIds: List<String>) -> Unit,
@@ -139,6 +141,8 @@ fun AddTaskDialog(
         }
     }
     val removedSubtaskIds = remember { mutableStateListOf<String>() }
+    // -1 = main "Assigned to"; >= 0 = that subtask row; null = no "Add person" form open.
+    var addPersonFor by remember { mutableStateOf<Int?>(null) }
     var estimate by remember { mutableStateOf(base?.estimatedMinutes?.toString() ?: "") }
     var showTimePicker by remember { mutableStateOf(false) }
     var recurring by remember { mutableStateOf(base?.isRecurring ?: request.defaultRecurring) }
@@ -271,26 +275,14 @@ fun AddTaskDialog(
                 }
 
                 FieldLabel("Assigned to")
-                OutlinedTextField(
+                PersonPicker(
                     value = assignee,
-                    onValueChange = { assignee = it.take(60) },
-                    label = { Text("Person name") },
-                    leadingIcon = { Icon(Icons.Outlined.Person, null) },
-                    singleLine = true,
+                    onValueChange = { assignee = it },
+                    people = people,
+                    label = "Person",
+                    onAddNew = { addPersonFor = -1 },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                val matches = assigneeSuggestions.filter {
-                    it != assignee.trim() && (assignee.isBlank() || it.contains(assignee.trim(), ignoreCase = true))
-                }.take(8)
-                if (matches.isNotEmpty()) {
-                    FlowRow(
-                        Modifier.padding(top = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        matches.forEach { name -> PillChip(name, false) { assignee = name } }
-                    }
-                }
 
                 FieldLabel("Priority")
                 FlowRow(
@@ -475,7 +467,8 @@ fun AddTaskDialog(
                                 index = i + 1,
                                 draft = sub,
                                 wide = wide,
-                                suggestions = assigneeSuggestions,
+                                people = people,
+                                onAddPerson = { addPersonFor = i },
                                 onChange = { subtasks[i] = it },
                                 onRemove = {
                                     sub.id?.let { removedSubtaskIds.add(it) }
@@ -512,6 +505,23 @@ fun AddTaskDialog(
                 }
             }
         }
+    }
+
+    addPersonFor?.let { target ->
+        PersonDialog(
+            existing = null,
+            takenNames = people.map { it.name },
+            onDismiss = { addPersonFor = null },
+            onSave = { p ->
+                onAddPerson(p)
+                if (target < 0) {
+                    assignee = p.name
+                } else if (target < subtasks.size) {
+                    subtasks[target] = subtasks[target].copy(assignee = p.name)
+                }
+                addPersonFor = null
+            },
+        )
     }
 
     if (showTimePicker) {
@@ -573,7 +583,8 @@ private fun SubtaskEditorRow(
     index: Int,
     draft: SubtaskDraft,
     wide: Boolean,
-    suggestions: List<String>,
+    people: List<PersonEntity>,
+    onAddPerson: () -> Unit,
     onChange: (SubtaskDraft) -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -590,10 +601,11 @@ private fun SubtaskEditorRow(
         )
     }
     val personField: @Composable (Modifier) -> Unit = { m ->
-        AssigneeField(
+        PersonPicker(
             value = draft.assignee,
             onValueChange = { onChange(draft.copy(assignee = it)) },
-            suggestions = suggestions,
+            people = people,
+            onAddNew = onAddPerson,
             modifier = m,
         )
     }
@@ -612,43 +624,6 @@ private fun SubtaskEditorRow(
                     IconButton(onClick = onRemove) { Icon(Icons.Outlined.Close, "Remove subtask", tint = KarColors.Slate) }
                 }
                 personField(Modifier.fillMaxWidth().padding(end = 10.dp, top = 4.dp))
-            }
-        }
-    }
-}
-
-/** Person-name text field with a drop-down of names already used. */
-@Composable
-fun AssigneeField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    suggestions: List<String>,
-    modifier: Modifier = Modifier,
-    label: String = "Assigned to",
-) {
-    var open by remember { mutableStateOf(false) }
-    Box(modifier) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { onValueChange(it.take(60)) },
-            label = { Text(label) },
-            leadingIcon = { Icon(Icons.Outlined.Person, null, Modifier.size(18.dp)) },
-            trailingIcon = if (suggestions.isNotEmpty()) {
-                { IconButton(onClick = { open = true }) { Icon(Icons.Outlined.ArrowDropDown, "Choose person") } }
-            } else null,
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            suggestions.forEach { name ->
-                DropdownMenuItem(text = { Text(name) }, onClick = { onValueChange(name); open = false })
-            }
-            if (value.isNotBlank()) {
-                DropdownMenuItem(
-                    text = { Text("Clear", color = KarColors.Slate) },
-                    onClick = { onValueChange(""); open = false },
-                )
             }
         }
     }

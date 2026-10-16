@@ -183,6 +183,7 @@ fun MeetingsScreen(
 fun MeetingEditorDialog(
     existing: MeetingMinuteEntity?,
     projects: List<ProjectEntity>,
+    people: List<com.kargroup.planner.data.PersonEntity>,
     defaultProjectId: String?,
     onDismiss: () -> Unit,
     onSave: (MeetingMinuteEntity) -> Unit,
@@ -380,11 +381,11 @@ fun MeetingEditorDialog(
                                         IconButton(onClick = { actions.removeAt(i) }) { Icon(Icons.Outlined.Delete, "Remove", tint = KarColors.Slate) }
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 48.dp)) {
-                                        OutlinedTextField(
-                                            item.assignee,
-                                            { actions[i] = item.copy(assignee = it) },
-                                            label = { Text("Assignee") },
-                                            singleLine = true,
+                                        PersonPicker(
+                                            value = item.assignee,
+                                            onValueChange = { actions[i] = item.copy(assignee = it) },
+                                            people = people,
+                                            label = "Assignee",
                                             modifier = Modifier.weight(1f),
                                         )
                                         Spacer(Modifier.width(8.dp))
