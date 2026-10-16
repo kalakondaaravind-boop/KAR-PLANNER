@@ -14,8 +14,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ProjectEntity::class,
         ContextTagEntity::class,
         MeetingMinuteEntity::class,
+        JournalEntry::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -24,11 +25,12 @@ abstract class KarDatabase : RoomDatabase() {
     abstract fun projectDao(): ProjectDao
     abstract fun contextDao(): ContextDao
     abstract fun meetingDao(): MeetingDao
+    abstract fun journalDao(): JournalDao
 
     companion object {
         fun build(context: Context): KarDatabase =
             Room.databaseBuilder(context.applicationContext, KarDatabase::class.java, "kar_planner.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
 
         /** v2 adds target time, estimated effort and manual schedule order - existing data is kept. */
@@ -45,6 +47,18 @@ abstract class KarDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE tasks ADD COLUMN status TEXT")
                 db.execSQL("ALTER TABLE tasks ADD COLUMN assignee TEXT")
+            }
+        }
+
+        /** v4 adds the personal daily journal - existing data is kept. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `journal_entries` (`id` TEXT NOT NULL, `entry_date` TEXT NOT NULL, " +
+                        "`mood` TEXT, `title` TEXT, `content` TEXT NOT NULL, `created_at` INTEGER NOT NULL, " +
+                        "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_journal_entries_entry_date` ON `journal_entries` (`entry_date`)")
             }
         }
     }

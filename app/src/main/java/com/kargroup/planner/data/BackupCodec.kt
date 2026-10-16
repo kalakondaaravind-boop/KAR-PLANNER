@@ -22,6 +22,20 @@ object BackupCodec {
             .put("projects", JSONArray().apply { s.projects.forEach { put(projectToJson(it)) } })
             .put("contexts", JSONArray().apply { s.contexts.forEach { put(contextToJson(it)) } })
             .put("meeting_minutes", JSONArray().apply { s.meetings.forEach { put(meetingToJson(it)) } })
+            .put("journal", JSONArray().apply {
+                s.journal.forEach { j ->
+                    put(
+                        JSONObject()
+                            .put("id", j.id)
+                            .put("date", j.date)
+                            .put("mood", j.mood ?: JSONObject.NULL)
+                            .put("title", j.title ?: JSONObject.NULL)
+                            .put("content", j.content)
+                            .put("created_at", j.createdAt)
+                            .put("updated_at", j.updatedAt)
+                    )
+                }
+            })
         return root.toString(2)
     }
 
@@ -74,7 +88,20 @@ object BackupCodec {
                 createdAt = o.optLong("created_at", System.currentTimeMillis()),
             )
         }
-        return BackupSnapshot(tasks, projects, contexts, meetings)
+        val journal = root.optJSONArray("journal").objects().mapIndexedNotNull { i, o ->
+            val date = o.optStringOrNull("date") ?: return@mapIndexedNotNull null
+            if (Ist.parse(date) == null) throw IllegalArgumentException("Journal entry #${i + 1} has an invalid date \"$date\".")
+            JournalEntry(
+                id = o.optStringOrNull("id") ?: newId(),
+                date = date,
+                mood = o.optStringOrNull("mood"),
+                title = o.optStringOrNull("title"),
+                content = o.optString("content", ""),
+                createdAt = o.optLong("created_at", System.currentTimeMillis()),
+                updatedAt = o.optLong("updated_at", System.currentTimeMillis()),
+            )
+        }
+        return BackupSnapshot(tasks, projects, contexts, meetings, journal)
     }
 
     // ---------------------------------------------------------------- encode

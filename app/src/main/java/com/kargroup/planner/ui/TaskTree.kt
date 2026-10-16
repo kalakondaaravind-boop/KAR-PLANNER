@@ -2,6 +2,7 @@ package com.kargroup.planner.ui
 
 import com.kargroup.planner.data.Priority
 import com.kargroup.planner.data.QUICK_TASK_MINUTES
+import com.kargroup.planner.data.TaskStatus
 import com.kargroup.planner.data.TaskEntity
 import com.kargroup.planner.util.Ist
 import java.time.LocalDate
@@ -21,6 +22,12 @@ data class TaskSection(
 )
 
 enum class SectionTone { Normal, Danger, Accent }
+
+/** Case-insensitive name match; a null name means "Unassigned". */
+fun sameAssignee(assignee: String?, name: String?): Boolean {
+    val a = assignee?.trim()?.ifBlank { null }
+    return if (name == null) a == null else a != null && a.equals(name.trim(), ignoreCase = true)
+}
 
 /** Ordering for top-level lists: open first, very high → high → medium → none, earliest target date/time, oldest first. */
 val rootOrder: Comparator<TaskEntity> = compareBy<TaskEntity>(
@@ -228,6 +235,20 @@ fun buildSections(
             )
         )
         is Screen.Project -> single(index.topLevelMatching { it.projectId == screen.id && openOrAll(it) })
-        Screen.Projects, Screen.Meetings, Screen.Schedule -> emptyList()
+        is Screen.Person -> {
+            val mine: (TaskEntity) -> Boolean = { sameAssignee(it.assignee, screen.name) }
+            val isOverdue: (TaskEntity) -> Boolean = { !it.done && it.dueDate != null && it.dueDate < today }
+            listOf(
+                TaskSection("p-overdue", "Overdue", SectionTone.Danger,
+                    index.buildRows(index.rootsMatching { mine(it) && isOverdue(it) }, showCompleted)),
+                TaskSection("p-initiated", "Initiated", SectionTone.Accent,
+                    index.buildRows(index.rootsMatching { mine(it) && !it.done && !isOverdue(it) && it.status == TaskStatus.INITIATED }, showCompleted)),
+                TaskSection("p-notstarted", "Not Started", SectionTone.Normal,
+                    index.buildRows(index.rootsMatching { mine(it) && !it.done && !isOverdue(it) && it.status != TaskStatus.INITIATED }, showCompleted)),
+                TaskSection("p-done", "Completed", SectionTone.Normal,
+                    if (showCompleted) index.buildRows(index.rootsMatching { mine(it) && it.done }.sortedByDescending { it.completedAt ?: 0L }, true, flat = true) else emptyList()),
+            ).filter { it.rows.isNotEmpty() }
+        }
+        Screen.Projects, Screen.Meetings, Screen.Schedule, Screen.Journal, Screen.People -> emptyList()
     }
 }

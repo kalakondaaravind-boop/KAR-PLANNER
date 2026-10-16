@@ -26,6 +26,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Book
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Download
@@ -287,8 +289,12 @@ internal fun Sidebar(
         NavItem("Completed", Icons.Outlined.TaskAlt, screen == Screen.Completed, null) { onNavigate(Screen.Completed) }
 
         NavLabel("Organize")
+        NavItem("By Person", Icons.Outlined.People, screen == Screen.People || screen is Screen.Person, null) { onNavigate(Screen.People) }
         NavItem("Projects", Icons.Outlined.Folder, screen == Screen.Projects || screen is Screen.Project, null) { onNavigate(Screen.Projects) }
         NavItem("Minutes of Meeting", Icons.Outlined.Groups, screen == Screen.Meetings, null) { onNavigate(Screen.Meetings) }
+
+        NavLabel("Personal")
+        NavItem("My Journal", Icons.Outlined.Book, screen == Screen.Journal, null) { onNavigate(Screen.Journal) }
 
         NavLabel("Utilities")
         NavItem("Reminders", Icons.Outlined.NotificationsActive, false, alertCount.takeIf { it > 0 }, KarColors.Amber, onClick = onReminders)
@@ -458,8 +464,10 @@ internal fun NavRail(
         RailItem("All", Icons.Outlined.ViewList, screen == Screen.AllTasks) { onNavigate(Screen.AllTasks) }
         RailItem("Done", Icons.Outlined.TaskAlt, screen == Screen.Completed) { onNavigate(Screen.Completed) }
         RailDivider()
+        RailItem("People", Icons.Outlined.People, screen == Screen.People || screen is Screen.Person) { onNavigate(Screen.People) }
         RailItem("Projects", Icons.Outlined.Folder, screen == Screen.Projects || screen is Screen.Project) { onNavigate(Screen.Projects) }
         RailItem("MoM", Icons.Outlined.Groups, screen == Screen.Meetings) { onNavigate(Screen.Meetings) }
+        RailItem("Journal", Icons.Outlined.Book, screen == Screen.Journal) { onNavigate(Screen.Journal) }
         RailDivider()
         RailItem(if (alertCount > 0) "Alerts ($alertCount)" else "Alerts", Icons.Outlined.NotificationsActive, false, onClick = onReminders)
         RailItem("Export", Icons.Outlined.Download, false, onClick = onExport)

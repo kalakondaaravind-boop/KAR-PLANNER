@@ -11,11 +11,36 @@ class KarRepository(private val db: KarDatabase) {
     private val projectDao = db.projectDao()
     private val contextDao = db.contextDao()
     private val meetingDao = db.meetingDao()
+    private val journalDao = db.journalDao()
 
     val tasks: Flow<List<TaskEntity>> = taskDao.observeAll()
     val projects: Flow<List<ProjectEntity>> = projectDao.observeAll()
     val contexts: Flow<List<ContextTagEntity>> = contextDao.observeAll()
     val meetings: Flow<List<MeetingMinuteEntity>> = meetingDao.observeAll()
+    val journal: Flow<List<JournalEntry>> = journalDao.observeAll()
+
+    // ---------------------------------------------------------------- journal
+
+    /** Saves the entry for a date; an entry left completely empty is removed. */
+    suspend fun saveJournal(date: String, mood: String?, title: String?, content: String) {
+        val existing = journalDao.getByDate(date)
+        val empty = mood == null && title.isNullOrBlank() && content.isBlank()
+        if (empty) {
+            if (existing != null) journalDao.delete(existing.id)
+            return
+        }
+        val now = System.currentTimeMillis()
+        journalDao.upsert(
+            (existing ?: JournalEntry(date = date, createdAt = now)).copy(
+                mood = mood,
+                title = title?.trim()?.ifBlank { null },
+                content = content.trimEnd(),
+                updatedAt = now,
+            )
+        )
+    }
+
+    suspend fun deleteJournal(id: String) = journalDao.delete(id)
 
     suspend fun allTasksOnce(): List<TaskEntity> = taskDao.getAll()
 
@@ -225,6 +250,7 @@ class KarRepository(private val db: KarDatabase) {
         projects = projectDao.getAll(),
         contexts = contextDao.getAll(),
         meetings = meetingDao.getAll(),
+        journal = journalDao.getAll(),
     )
 
     /** Merges a backup into the database (records with the same id are replaced). */
@@ -234,6 +260,11 @@ class KarRepository(private val db: KarDatabase) {
             contextDao.upsertAll(snapshot.contexts)
             meetingDao.upsertAll(snapshot.meetings)
             snapshot.tasks.chunked(300).forEach { taskDao.upsertAll(it) }
+            // One entry per date: an imported entry replaces the one already on that date.
+            snapshot.journal.forEach { e ->
+                val existing = journalDao.getByDate(e.date)
+                journalDao.upsert(e.copy(id = existing?.id ?: e.id))
+            }
         }
     }
 
@@ -242,6 +273,7 @@ class KarRepository(private val db: KarDatabase) {
         projects = projectDao.count(),
         contexts = contextDao.count(),
         meetings = meetingDao.count(),
+        journal = journalDao.count(),
     )
 
     suspend fun deleteAll() {
@@ -250,6 +282,7 @@ class KarRepository(private val db: KarDatabase) {
             projectDao.deleteAll()
             contextDao.deleteAll()
             meetingDao.deleteAll()
+            journalDao.deleteAll()
         }
     }
 

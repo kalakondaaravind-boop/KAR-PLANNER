@@ -122,6 +122,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
     val projects by vm.projects.collectAsStateWithLifecycle()
     val contexts by vm.contexts.collectAsStateWithLifecycle()
     val meetings by vm.meetings.collectAsStateWithLifecycle()
+    val journal by vm.journal.collectAsStateWithLifecycle()
     val screen by vm.screen.collectAsStateWithLifecycle()
     val drillRootId by vm.drillRootId.collectAsStateWithLifecycle()
     val showCompleted by vm.showCompleted.collectAsStateWithLifecycle()
@@ -220,6 +221,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                 Screen.Upcoming -> TaskDialogRequest(defaultDueDate = Ist.today().plusDays(1).toString())
                 Screen.Recurring -> TaskDialogRequest(defaultRecurring = true, defaultDueDate = today)
                 is Screen.Project -> TaskDialogRequest(defaultProjectId = s.id)
+                is Screen.Person -> TaskDialogRequest(defaultAssignee = s.name)
                 else -> TaskDialogRequest()
             }
         }
@@ -280,7 +282,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                 )
             },
             floatingActionButton = {
-                if (!wide && screen != Screen.Meetings && screen != Screen.Projects) {
+                if (!wide && screen != Screen.Meetings && screen != Screen.Projects && screen != Screen.Journal && screen != Screen.People) {
                     ExtendedFloatingActionButton(
                         onClick = openAddActivity,
                         containerColor = KarColors.SkyDeep,
@@ -334,6 +336,20 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                             onAddActivity = openAddActivity,
                         )
                     }
+                    Screen.People -> PeopleScreen(
+                        tasks = tasks,
+                        today = today,
+                        wide = wide,
+                        header = header,
+                        onOpen = { vm.navigate(Screen.Person(it)) },
+                    )
+                    Screen.Journal -> JournalScreen(
+                        entries = journal,
+                        today = today,
+                        wide = wide,
+                        onSave = { date, mood, title, content, quiet -> vm.saveJournal(date, mood, title, content, quiet) },
+                        onDelete = { vm.deleteJournal(it) },
+                    )
                     Screen.Meetings -> MeetingsScreen(
                         meetings = meetings,
                         projects = projectMap,
@@ -365,6 +381,14 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                             onAddActivity = openAddActivity,
                             header = header,
                             sheetExtras = {
+                                if (s is Screen.Person) {
+                                    androidx.compose.material3.OutlinedButton(
+                                        onClick = { vm.navigate(Screen.People) },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
+                                        modifier = Modifier.padding(top = 8.dp),
+                                    ) { Text("← All people") }
+                                }
                                 if (s is Screen.Project) {
                                     val project = projectMap[s.id]
                                     if (project != null) {
@@ -465,9 +489,10 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
             request = req,
             projects = projects,
             assigneeSuggestions = assigneeNames,
+            existingSubtasks = req.existing?.let { index.children(it.id).sortedWith(childOrder) } ?: emptyList(),
             onDismiss = { taskDialog = null },
-            onSave = { task, completed ->
-                vm.saveTask(task, isNew = req.existing == null, wantCompleted = completed)
+            onSave = { task, completed, subs, removed ->
+                vm.saveTask(task, isNew = req.existing == null, wantCompleted = completed, subtasks = subs, removedSubtaskIds = removed)
                 taskDialog = null
             },
         )
@@ -568,7 +593,10 @@ fun screenTitle(screen: Screen, projects: Map<String, ProjectEntity>, contexts: 
     Screen.Completed -> "Completed"
     Screen.Projects -> "Projects"
     Screen.Meetings -> "Minutes of Meeting"
+    Screen.Journal -> "My Journal"
     is Screen.Project -> projects[screen.id]?.name ?: "Project"
+    Screen.People -> "By Person"
+    is Screen.Person -> screen.name ?: "Unassigned"
 }
 
 private fun screenSubtitle(
@@ -587,6 +615,7 @@ private fun screenSubtitle(
         Screen.Recurring -> "$countText · repeating on a cadence" to KarColors.Navy2
         Screen.AllTasks -> countText to KarColors.Navy
         Screen.Completed -> "$countText · most recent first" to KarColors.Green
+        is Screen.Person -> "$countText · assigned ${if (screen.name == null) "to nobody yet" else "to ${screen.name}"}" to KarColors.SkyDeep
         is Screen.Project -> {
             val p = projects[screen.id]
             ((p?.description?.takeIf { it.isNotBlank() }?.let { "$it · " } ?: "") + countText) to parseHexColor(p?.color)

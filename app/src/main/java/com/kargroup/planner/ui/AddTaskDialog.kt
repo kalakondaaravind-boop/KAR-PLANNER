@@ -1,5 +1,14 @@
 package com.kargroup.planner.ui
 
+import com.kargroup.planner.data.newId
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.AccountTree
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -90,6 +99,16 @@ data class TaskDialogRequest(
     val defaultProjectId: String? = null,
     val defaultDueDate: String? = null,
     val defaultRecurring: Boolean = false,
+    val defaultAssignee: String? = null,
+)
+
+/** A subtask row edited inside the activity pop-up. [id] is null for a new subtask. */
+data class SubtaskDraft(
+    val key: String = newId(),
+    val id: String? = null,
+    val text: String = "",
+    val assignee: String = "",
+    val done: Boolean = false,
 )
 
 private val DayLetters = listOf("M", "T", "W", "T", "F", "S", "S")
@@ -100,8 +119,9 @@ fun AddTaskDialog(
     request: TaskDialogRequest,
     projects: List<ProjectEntity>,
     assigneeSuggestions: List<String>,
+    existingSubtasks: List<TaskEntity> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (task: TaskEntity, completed: Boolean) -> Unit,
+    onSave: (task: TaskEntity, completed: Boolean, subtasks: List<SubtaskDraft>, removedSubtaskIds: List<String>) -> Unit,
 ) {
     val base = request.existing
     val parent = request.parent
@@ -112,7 +132,13 @@ fun AddTaskDialog(
     var dueDate by remember { mutableStateOf(if (base != null) base.dueDate else request.defaultDueDate) }
     var dueTime by remember { mutableStateOf(base?.dueTime) }
     var status by remember { mutableStateOf(base?.effectiveStatus ?: TaskStatus.NOT_STARTED) }
-    var assignee by remember { mutableStateOf(base?.assignee ?: parent?.assignee ?: "") }
+    var assignee by remember { mutableStateOf(base?.assignee ?: request.defaultAssignee ?: parent?.assignee ?: "") }
+    val subtasks = remember {
+        mutableStateListOf<SubtaskDraft>().apply {
+            addAll(existingSubtasks.map { SubtaskDraft(id = it.id, text = it.text, assignee = it.assignee ?: "", done = it.done) })
+        }
+    }
+    val removedSubtaskIds = remember { mutableStateListOf<String>() }
     var estimate by remember { mutableStateOf(base?.estimatedMinutes?.toString() ?: "") }
     var showTimePicker by remember { mutableStateOf(false) }
     var recurring by remember { mutableStateOf(base?.isRecurring ?: request.defaultRecurring) }
@@ -156,6 +182,8 @@ fun AddTaskDialog(
                 recurrenceDaysOfWeek = if (recurring && weeklyKind && days.isNotEmpty()) days.sorted() else null,
             ),
             status == TaskStatus.COMPLETED,
+            subtasks.filter { it.text.isNotBlank() }.map { it.copy(text = it.text.trim(), assignee = it.assignee.trim()) },
+            removedSubtaskIds.toList() + subtasks.filter { it.text.isBlank() && it.id != null }.mapNotNull { it.id },
         )
     }
 
@@ -421,6 +449,56 @@ fun AddTaskDialog(
                     }
                 }
 
+                // ------------------------------------------------------------ subtasks
+                Spacer(Modifier.height(14.dp))
+                Surface(color = KarColors.Tint, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, KarColors.Border)) {
+                    Column(Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.AccountTree, null, tint = KarColors.SkyDeep, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Subtasks" + if (subtasks.isNotEmpty()) " (${subtasks.size})" else "",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = KarColors.Navy,
+                                )
+                                Text(
+                                    "Break the activity down and assign each step to a person.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = KarColors.Slate,
+                                )
+                            }
+                        }
+                        subtasks.forEachIndexed { i, sub ->
+                            Spacer(Modifier.height(10.dp))
+                            SubtaskEditorRow(
+                                index = i + 1,
+                                draft = sub,
+                                wide = wide,
+                                suggestions = assigneeSuggestions,
+                                onChange = { subtasks[i] = it },
+                                onRemove = {
+                                    sub.id?.let { removedSubtaskIds.add(it) }
+                                    subtasks.removeAt(i)
+                                },
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = { subtasks.add(SubtaskDraft(assignee = "")) }) {
+                            Icon(Icons.Outlined.Add, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Add subtask")
+                        }
+                        if (base != null && subtasks.isNotEmpty()) {
+                            Text(
+                                "Due dates, priority and deeper sub-steps for a subtask can be set by opening it from the list.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KarColors.SlateLight,
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(18.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onDismiss) { Text("Cancel", color = KarColors.Slate) }
@@ -488,4 +566,90 @@ fun PillChip(label: String, selected: Boolean, accent: Color = KarColors.SkyDeep
         label = { Text(label) },
         colors = chipColors(accent),
     )
+}
+
+@Composable
+private fun SubtaskEditorRow(
+    index: Int,
+    draft: SubtaskDraft,
+    wide: Boolean,
+    suggestions: List<String>,
+    onChange: (SubtaskDraft) -> Unit,
+    onRemove: () -> Unit,
+) {
+    val titleField: @Composable (Modifier) -> Unit = { m ->
+        OutlinedTextField(
+            value = draft.text,
+            onValueChange = { onChange(draft.copy(text = it)) },
+            label = { Text("Subtask $index") },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                textDecoration = if (draft.done) TextDecoration.LineThrough else null,
+            ),
+            modifier = m,
+        )
+    }
+    val personField: @Composable (Modifier) -> Unit = { m ->
+        AssigneeField(
+            value = draft.assignee,
+            onValueChange = { onChange(draft.copy(assignee = it)) },
+            suggestions = suggestions,
+            modifier = m,
+        )
+    }
+    Surface(color = Color.White, shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, KarColors.Border)) {
+        if (wide) {
+            Row(Modifier.padding(start = 10.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                titleField(Modifier.weight(1.5f))
+                Spacer(Modifier.width(8.dp))
+                personField(Modifier.weight(1f))
+                IconButton(onClick = onRemove) { Icon(Icons.Outlined.Close, "Remove subtask", tint = KarColors.Slate) }
+            }
+        } else {
+            Column(Modifier.padding(start = 10.dp, top = 4.dp, bottom = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    titleField(Modifier.weight(1f))
+                    IconButton(onClick = onRemove) { Icon(Icons.Outlined.Close, "Remove subtask", tint = KarColors.Slate) }
+                }
+                personField(Modifier.fillMaxWidth().padding(end = 10.dp, top = 4.dp))
+            }
+        }
+    }
+}
+
+/** Person-name text field with a drop-down of names already used. */
+@Composable
+fun AssigneeField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    suggestions: List<String>,
+    modifier: Modifier = Modifier,
+    label: String = "Assigned to",
+) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { onValueChange(it.take(60)) },
+            label = { Text(label) },
+            leadingIcon = { Icon(Icons.Outlined.Person, null, Modifier.size(18.dp)) },
+            trailingIcon = if (suggestions.isNotEmpty()) {
+                { IconButton(onClick = { open = true }) { Icon(Icons.Outlined.ArrowDropDown, "Choose person") } }
+            } else null,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            suggestions.forEach { name ->
+                DropdownMenuItem(text = { Text(name) }, onClick = { onValueChange(name); open = false })
+            }
+            if (value.isNotBlank()) {
+                DropdownMenuItem(
+                    text = { Text("Clear", color = KarColors.Slate) },
+                    onClick = { onValueChange(""); open = false },
+                )
+            }
+        }
+    }
 }

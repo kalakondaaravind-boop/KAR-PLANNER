@@ -11,6 +11,7 @@ import com.kargroup.planner.data.DataCounts
 import com.kargroup.planner.data.MeetingMinuteEntity
 import com.kargroup.planner.data.ProjectEntity
 import com.kargroup.planner.data.TaskEntity
+import com.kargroup.planner.data.JournalEntry
 import com.kargroup.planner.data.TaskStatus
 import com.kargroup.planner.reminders.ReminderNotifications
 import com.kargroup.planner.util.Ist
@@ -38,6 +39,10 @@ sealed interface Screen {
     data object Completed : Screen
     data object Projects : Screen
     data object Meetings : Screen
+    data object Journal : Screen
+    data object People : Screen
+    /** Review page for one person; [name] is null for "Unassigned". */
+    data class Person(val name: String?) : Screen
     data class Project(val id: String) : Screen
 }
 
@@ -55,6 +60,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         repo.contexts.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val meetings: StateFlow<List<MeetingMinuteEntity>> =
         repo.meetings.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val journal: StateFlow<List<JournalEntry>> =
+        repo.journal.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val screen = MutableStateFlow<Screen>(Screen.Schedule)
 
@@ -101,6 +108,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         showCompleted.value = value
     }
 
+    // ---------------------------------------------------------------- journal
+
+    fun saveJournal(date: String, mood: String?, title: String?, content: String, quiet: Boolean = false) =
+        viewModelScope.launch {
+            repo.saveJournal(date, mood, title, content)
+            if (!quiet) toast("Journal saved for ${Ist.friendly(date)}")
+        }
+
+    fun deleteJournal(entry: JournalEntry) = viewModelScope.launch {
+        repo.deleteJournal(entry.id)
+        toast("Journal entry deleted")
+    }
+
     // -------------------------------------------------------------- scheduler
 
     fun setScheduleManual(manual: Boolean) {
@@ -129,10 +149,42 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Saves an activity. [wantCompleted] comes from the Status selector: switching to/from
      * Completed runs the normal completion logic (recurrence, subtasks, MoM sync).
      */
-    fun saveTask(task: TaskEntity, isNew: Boolean, wantCompleted: Boolean = task.done) = viewModelScope.launch {
+    fun saveTask(
+        task: TaskEntity,
+        isNew: Boolean,
+        wantCompleted: Boolean = task.done,
+        subtasks: List<SubtaskDraft> = emptyList(),
+        removedSubtaskIds: List<String> = emptyList(),
+    ) = viewModelScope.launch {
         repo.saveTask(task)
+        // Subtasks edited inside the pop-up: update, create or remove.
+        val current = tasks.value.associateBy { it.id }
+        val base = System.currentTimeMillis()
+        subtasks.forEachIndexed { i, d ->
+            val existing = d.id?.let { current[it] }
+            if (existing != null) {
+                if (existing.text != d.text || (existing.assignee ?: "") != d.assignee) {
+                    repo.saveTask(existing.copy(text = d.text, assignee = d.assignee.ifBlank { null }))
+                }
+            } else {
+                repo.saveTask(
+                    TaskEntity(
+                        text = d.text,
+                        assignee = d.assignee.ifBlank { null },
+                        parentId = task.id,
+                        projectId = task.projectId,
+                        createdAt = base + i, // keeps the order they were typed in
+                    )
+                )
+            }
+        }
+        removedSubtaskIds.distinct().forEach { repo.deleteTask(it) }
         if (wantCompleted != task.done) repo.setDone(task.id, wantCompleted, includeSubtasks = true)
-        toast(if (isNew) "Activity created" else "Activity updated")
+        val n = subtasks.count { it.id == null }
+        toast(
+            (if (isNew) "Activity created" else "Activity updated") +
+                if (n > 0) " · $n subtask${if (n == 1) "" else "s"} added" else ""
+        )
     }
 
     /** Quick status change from a list row. */

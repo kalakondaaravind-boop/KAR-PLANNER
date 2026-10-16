@@ -130,3 +130,27 @@ interface MeetingDao {
     @Query("DELETE FROM meeting_minutes")
     suspend fun deleteAll()
 }
+
+@Dao
+interface JournalDao {
+    @Query("SELECT * FROM journal_entries ORDER BY entry_date DESC")
+    fun observeAll(): Flow<List<JournalEntry>>
+
+    @Query("SELECT * FROM journal_entries")
+    suspend fun getAll(): List<JournalEntry>
+
+    @Query("SELECT * FROM journal_entries WHERE entry_date = :date LIMIT 1")
+    suspend fun getByDate(date: String): JournalEntry?
+
+    @Upsert
+    suspend fun upsert(entry: JournalEntry)
+
+    @Query("DELETE FROM journal_entries WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("SELECT COUNT(*) FROM journal_entries")
+    suspend fun count(): Int
+
+    @Query("DELETE FROM journal_entries")
+    suspend fun deleteAll()
+}

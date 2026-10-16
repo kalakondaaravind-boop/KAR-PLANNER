@@ -136,11 +136,25 @@ data class MeetingMinuteEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
 )
 
-data class DataCounts(val tasks: Int, val projects: Int, val contexts: Int, val meetings: Int)
+/** One personal journal entry per calendar date (IST). */
+@Entity(tableName = "journal_entries", indices = [Index(value = ["entry_date"], unique = true)])
+data class JournalEntry(
+    @PrimaryKey val id: String = newId(),
+    /** 'YYYY-MM-DD' in IST */
+    @ColumnInfo(name = "entry_date") val date: String,
+    @ColumnInfo(name = "mood") val mood: String? = null,
+    @ColumnInfo(name = "title") val title: String? = null,
+    @ColumnInfo(name = "content") val content: String = "",
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis(),
+)
+
+data class DataCounts(val tasks: Int, val projects: Int, val contexts: Int, val meetings: Int, val journal: Int = 0)
 
 data class BackupSnapshot(
     val tasks: List<TaskEntity>,
     val projects: List<ProjectEntity>,
     val contexts: List<ContextTagEntity>,
     val meetings: List<MeetingMinuteEntity>,
+    val journal: List<JournalEntry> = emptyList(),
 )
