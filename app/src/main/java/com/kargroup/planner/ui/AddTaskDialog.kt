@@ -65,6 +65,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kargroup.planner.data.QUICK_TASK_MINUTES
+import com.kargroup.planner.data.TaskStatus
+import com.kargroup.planner.data.effectiveStatus
+import androidx.compose.material.icons.outlined.Person
 import com.kargroup.planner.data.Frequency
 import com.kargroup.planner.data.Priority
 import com.kargroup.planner.data.ProjectEntity
@@ -96,8 +99,9 @@ private val DayLetters = listOf("M", "T", "W", "T", "F", "S", "S")
 fun AddTaskDialog(
     request: TaskDialogRequest,
     projects: List<ProjectEntity>,
+    assigneeSuggestions: List<String>,
     onDismiss: () -> Unit,
-    onSave: (TaskEntity) -> Unit,
+    onSave: (task: TaskEntity, completed: Boolean) -> Unit,
 ) {
     val base = request.existing
     val parent = request.parent
@@ -107,6 +111,8 @@ fun AddTaskDialog(
     var priority by remember { mutableStateOf(base?.priority) }
     var dueDate by remember { mutableStateOf(if (base != null) base.dueDate else request.defaultDueDate) }
     var dueTime by remember { mutableStateOf(base?.dueTime) }
+    var status by remember { mutableStateOf(base?.effectiveStatus ?: TaskStatus.NOT_STARTED) }
+    var assignee by remember { mutableStateOf(base?.assignee ?: parent?.assignee ?: "") }
     var estimate by remember { mutableStateOf(base?.estimatedMinutes?.toString() ?: "") }
     var showTimePicker by remember { mutableStateOf(false) }
     var recurring by remember { mutableStateOf(base?.isRecurring ?: request.defaultRecurring) }
@@ -142,11 +148,14 @@ fun AddTaskDialog(
                 dueDate = if (recurring && dueDate == null) today else dueDate,
                 dueTime = if (dueDate == null && !recurring) null else dueTime,
                 estimatedMinutes = estimate.toIntOrNull()?.takeIf { it > 0 },
+                status = if (status == TaskStatus.COMPLETED) (template.status ?: TaskStatus.INITIATED) else status,
+                assignee = assignee.trim().ifBlank { null },
                 isRecurring = recurring,
                 recurrenceFrequency = if (recurring) frequency else null,
                 recurrenceInterval = if (recurring) interval.coerceAtLeast(1) else 1,
                 recurrenceDaysOfWeek = if (recurring && weeklyKind && days.isNotEmpty()) days.sorted() else null,
-            )
+            ),
+            status == TaskStatus.COMPLETED,
         )
     }
 
@@ -222,6 +231,38 @@ fun AddTaskDialog(
 
                 Spacer(Modifier.height(12.dp))
                 SelectorField("Project", projectOptions, projectId, { projectId = it }, Modifier.fillMaxWidth())
+
+                FieldLabel("Status")
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    PillChip("⚪ Not Started", status == TaskStatus.NOT_STARTED, KarColors.Slate) { status = TaskStatus.NOT_STARTED }
+                    PillChip("🔵 Initiated", status == TaskStatus.INITIATED, KarColors.SkyDeep) { status = TaskStatus.INITIATED }
+                    PillChip("🟢 Completed", status == TaskStatus.COMPLETED, KarColors.Green) { status = TaskStatus.COMPLETED }
+                }
+
+                FieldLabel("Assigned to")
+                OutlinedTextField(
+                    value = assignee,
+                    onValueChange = { assignee = it.take(60) },
+                    label = { Text("Person name") },
+                    leadingIcon = { Icon(Icons.Outlined.Person, null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                val matches = assigneeSuggestions.filter {
+                    it != assignee.trim() && (assignee.isBlank() || it.contains(assignee.trim(), ignoreCase = true))
+                }.take(8)
+                if (matches.isNotEmpty()) {
+                    FlowRow(
+                        Modifier.padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        matches.forEach { name -> PillChip(name, false) { assignee = name } }
+                    }
+                }
 
                 FieldLabel("Priority")
                 FlowRow(

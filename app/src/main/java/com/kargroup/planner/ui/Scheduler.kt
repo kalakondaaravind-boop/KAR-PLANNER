@@ -82,6 +82,7 @@ fun SchedulerScreen(
     onMove: (from: Int, to: Int) -> Unit,
     onResetManual: () -> Unit,
     onToggle: (TaskEntity, Boolean) -> Unit,
+    onStatus: (TaskEntity, String) -> Unit,
     onOpen: (TaskEntity) -> Unit,
     onAddActivity: () -> Unit,
 ) {
@@ -186,6 +187,7 @@ fun SchedulerScreen(
                     onMoveUp = { onMove(i, i - 1) },
                     onMoveDown = { onMove(i, i + 1) },
                     onToggle = onToggle,
+                    onStatus = onStatus,
                     onOpen = onOpen,
                 )
                 HorizontalDivider(color = KarColors.Border, modifier = Modifier.padding(start = 16.dp))
@@ -245,6 +247,7 @@ private fun ScheduleRow(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onToggle: (TaskEntity, Boolean) -> Unit,
+    onStatus: (TaskEntity, String) -> Unit,
     onOpen: (TaskEntity) -> Unit,
 ) {
     val task = item.task
@@ -309,6 +312,8 @@ private fun ScheduleRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                StatusPill(task, onStatus)
+                AssigneePill(task)
                 PriorityPill(task.priority)
                 if (task.estimatedMinutes != null) {
                     EstimatePill(task)

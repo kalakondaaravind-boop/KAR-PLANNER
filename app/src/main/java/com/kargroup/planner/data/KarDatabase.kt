@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ContextTagEntity::class,
         MeetingMinuteEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -28,7 +28,7 @@ abstract class KarDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): KarDatabase =
             Room.databaseBuilder(context.applicationContext, KarDatabase::class.java, "kar_planner.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
 
         /** v2 adds target time, estimated effort and manual schedule order - existing data is kept. */
@@ -37,6 +37,14 @@ abstract class KarDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE tasks ADD COLUMN due_time TEXT")
                 db.execSQL("ALTER TABLE tasks ADD COLUMN estimated_minutes INTEGER")
                 db.execSQL("ALTER TABLE tasks ADD COLUMN manual_order INTEGER")
+            }
+        }
+
+        /** v3 adds activity status and assigned person - existing data is kept. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tasks ADD COLUMN status TEXT")
+                db.execSQL("ALTER TABLE tasks ADD COLUMN assignee TEXT")
             }
         }
     }

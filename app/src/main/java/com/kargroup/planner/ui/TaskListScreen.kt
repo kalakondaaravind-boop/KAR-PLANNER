@@ -71,6 +71,12 @@ import com.kargroup.planner.data.ContextTagEntity
 import com.kargroup.planner.data.Priority
 import com.kargroup.planner.data.ProjectEntity
 import com.kargroup.planner.data.TaskEntity
+import com.kargroup.planner.data.TaskStatus
+import com.kargroup.planner.data.effectiveStatus
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Person
 import com.kargroup.planner.ui.components.MetaPill
 import com.kargroup.planner.ui.components.contextIcon
 import com.kargroup.planner.ui.theme.KarColors
@@ -85,7 +91,55 @@ class TaskActions(
     val onDrill: (String?) -> Unit,
     val onAddSubtask: (TaskEntity) -> Unit,
     val onDelete: (TaskEntity) -> Unit,
+    val onStatus: (TaskEntity, String) -> Unit,
 )
+
+fun statusColor(s: String): Color = when (s) {
+    TaskStatus.COMPLETED -> KarColors.Green
+    TaskStatus.INITIATED -> KarColors.SkyDeep
+    else -> KarColors.Slate
+}
+
+/** Status tag that opens a small menu to switch Not Started / Initiated / Completed. */
+@Composable
+fun StatusPill(task: TaskEntity, onStatus: (TaskEntity, String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val current = task.effectiveStatus
+    val color = statusColor(current)
+    Box {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = color.copy(alpha = 0.12f),
+            border = BorderStroke(1.dp, color.copy(alpha = 0.35f)),
+            onClick = { open = true },
+        ) {
+            Row(Modifier.padding(start = 8.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(7.dp).background(color, CircleShape))
+                Spacer(Modifier.width(5.dp))
+                Text(TaskStatus.label(current), color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Icon(Icons.Outlined.ArrowDropDown, null, tint = color, modifier = Modifier.size(16.dp))
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            TaskStatus.ALL.forEach { s ->
+                DropdownMenuItem(
+                    text = { Text(TaskStatus.label(s), fontWeight = if (s == current) FontWeight.Bold else FontWeight.Normal) },
+                    leadingIcon = { Box(Modifier.size(10.dp).background(statusColor(s), CircleShape)) },
+                    onClick = {
+                        open = false
+                        if (s != current) onStatus(task, s)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AssigneePill(task: TaskEntity) {
+    val who = task.assignee?.takeIf { it.isNotBlank() } ?: return
+    MetaPill(who, KarColors.Navy2, Icons.Outlined.Person)
+}
 
 private val SheetTop = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
 private val SheetBottom = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
@@ -406,6 +460,8 @@ fun TaskRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                StatusPill(task, actions.onStatus)
+                AssigneePill(task)
                 PriorityPill(task.priority)
                 if (due != null) {
                     val color = when {

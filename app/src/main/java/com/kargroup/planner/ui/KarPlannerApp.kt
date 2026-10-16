@@ -101,6 +101,7 @@ import com.kargroup.planner.data.ContextTagEntity
 import com.kargroup.planner.data.MeetingMinuteEntity
 import com.kargroup.planner.data.ProjectEntity
 import com.kargroup.planner.data.TaskEntity
+import com.kargroup.planner.data.TaskStatus
 import com.kargroup.planner.reminders.Reminders
 import com.kargroup.planner.ui.components.KarEmblem
 import com.kargroup.planner.ui.components.KarLogo
@@ -150,6 +151,10 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
 
     val index = remember(tasks) { TaskIndex(tasks) }
     val projectMap = remember(projects) { projects.associateBy { it.id } }
+    val assigneeNames = remember(tasks, meetings) {
+        (tasks.mapNotNull { it.assignee } + meetings.flatMap { m -> m.attendees + m.actionItems.map { it.assignee } })
+            .map { it.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
+    }
     val contextMap = remember(contexts) { contexts.associateBy { it.id } }
     val alerts = remember(tasks, today, reminderVersion, minuteTick) {
         Reminders.alerts(tasks, vm.reminderPrefs.suppressedIds(), today)
@@ -234,6 +239,13 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
         onDrill = { vm.drillInto(it) },
         onAddSubtask = { taskDialog = TaskDialogRequest(parent = it) },
         onDelete = { deleteTaskRequest = it },
+        onStatus = { task, status ->
+            if (status == TaskStatus.COMPLETED && !task.isRecurring && index.openDescendantCount(task.id) > 0) {
+                toggleRequest = ToggleRequest(task, index.openDescendantCount(task.id))
+            } else {
+                vm.setStatus(task, status)
+            }
+        },
     )
 
     BackHandler(enabled = drillRootId != null) {
@@ -317,6 +329,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                             onMove = { from, to -> vm.moveInSchedule(items.map { it.task.id }, from, to) },
                             onResetManual = { vm.resetManualToAuto(autoIds) },
                             onToggle = { task, checked -> taskActions.onToggle(task, checked) },
+                            onStatus = { task, status -> taskActions.onStatus(task, status) },
                             onOpen = { taskDialog = TaskDialogRequest(existing = it) },
                             onAddActivity = openAddActivity,
                         )
@@ -451,9 +464,10 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
         AddTaskDialog(
             request = req,
             projects = projects,
+            assigneeSuggestions = assigneeNames,
             onDismiss = { taskDialog = null },
-            onSave = { task ->
-                vm.saveTask(task, isNew = req.existing == null)
+            onSave = { task, completed ->
+                vm.saveTask(task, isNew = req.existing == null, wantCompleted = completed)
                 taskDialog = null
             },
         )

@@ -32,6 +32,9 @@ class KarRepository(private val db: KarDatabase) {
 
     suspend fun setCollapsed(id: String, collapsed: Boolean) = taskDao.setCollapsed(id, collapsed)
 
+    /** Sets Not Started / Initiated on an activity (Completed goes through [setDone]). */
+    suspend fun setStatus(id: String, status: String) = taskDao.setStatus(id, status)
+
     /** Saves the scheduler's manual order: position i gets order (i + 1) * 10. */
     suspend fun saveManualOrder(orderedIds: List<String>) {
         db.withTransaction {
@@ -68,6 +71,7 @@ class KarRepository(private val db: KarDatabase) {
                 completedAt = null,
                 createdAt = now,
                 dueDate = Recurrence.nextDueDate(task).toString(),
+                status = TaskStatus.NOT_STARTED,
             )
             val idMap = HashMap<String, String>()
             idMap[task.id] = next.id
@@ -168,16 +172,15 @@ class KarRepository(private val db: KarDatabase) {
         val byItem = linked.associateBy { it.meetingActionItemId }
 
         cleaned.actionItems.forEach { item ->
-            val title = buildString {
-                append(item.description.trim())
-                if (item.assignee.isNotBlank()) append(" — ").append(item.assignee.trim())
-            }
+            val title = item.description.trim()
+            val person = item.assignee.trim().ifBlank { null }
             val due = item.dueDate?.takeIf { it.isNotBlank() }
             val existing = byItem[item.id]
             if (existing == null) {
                 taskDao.upsert(
                     TaskEntity(
                         text = title,
+                        assignee = person,
                         notes = "Action item from MoM: ${cleaned.title} (${cleaned.meetingDate})",
                         priority = Priority.HIGH,
                         dueDate = due,
@@ -192,6 +195,7 @@ class KarRepository(private val db: KarDatabase) {
                 taskDao.upsert(
                     existing.copy(
                         text = title,
+                        assignee = person,
                         dueDate = due,
                         projectId = cleaned.projectId ?: existing.projectId,
                         done = item.completed,

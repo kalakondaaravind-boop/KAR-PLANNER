@@ -92,6 +92,8 @@ object BackupCodec {
         .put("due_time", t.dueTime ?: JSONObject.NULL)
         .put("estimated_minutes", t.estimatedMinutes ?: JSONObject.NULL)
         .put("manual_order", t.manualOrder ?: JSONObject.NULL)
+        .put("status", t.status ?: JSONObject.NULL)
+        .put("assignee", t.assignee ?: JSONObject.NULL)
         .put("is_recurring", t.isRecurring)
         .put("recurrence_frequency", t.recurrenceFrequency ?: JSONObject.NULL)
         .put("recurrence_interval", t.recurrenceInterval)
@@ -162,6 +164,8 @@ object BackupCodec {
             dueDate = due,
             dueTime = o.optStringOrNull("due_time")?.takeIf { Regex("^\\d{2}:\\d{2}$").matches(it) },
             estimatedMinutes = if (o.has("estimated_minutes") && !o.isNull("estimated_minutes")) o.optInt("estimated_minutes").takeIf { it > 0 } else null,
+            status = o.optStringOrNull("status")?.takeIf { it in TaskStatus.ALL },
+            assignee = o.optStringOrNull("assignee")?.trim()?.ifBlank { null },
             manualOrder = if (o.has("manual_order") && !o.isNull("manual_order")) o.optLong("manual_order") else null,
             isRecurring = o.optBoolean("is_recurring", false),
             recurrenceFrequency = freq,

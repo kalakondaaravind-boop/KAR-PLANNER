@@ -11,6 +11,7 @@ import com.kargroup.planner.data.DataCounts
 import com.kargroup.planner.data.MeetingMinuteEntity
 import com.kargroup.planner.data.ProjectEntity
 import com.kargroup.planner.data.TaskEntity
+import com.kargroup.planner.data.TaskStatus
 import com.kargroup.planner.reminders.ReminderNotifications
 import com.kargroup.planner.util.Ist
 import kotlinx.coroutines.Dispatchers
@@ -124,9 +125,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------------ tasks
 
-    fun saveTask(task: TaskEntity, isNew: Boolean) = viewModelScope.launch {
+    /**
+     * Saves an activity. [wantCompleted] comes from the Status selector: switching to/from
+     * Completed runs the normal completion logic (recurrence, subtasks, MoM sync).
+     */
+    fun saveTask(task: TaskEntity, isNew: Boolean, wantCompleted: Boolean = task.done) = viewModelScope.launch {
         repo.saveTask(task)
+        if (wantCompleted != task.done) repo.setDone(task.id, wantCompleted, includeSubtasks = true)
         toast(if (isNew) "Activity created" else "Activity updated")
+    }
+
+    /** Quick status change from a list row. */
+    fun setStatus(task: TaskEntity, status: String) = viewModelScope.launch {
+        when (status) {
+            TaskStatus.COMPLETED -> if (!task.done) repo.setDone(task.id, true, includeSubtasks = true)
+            else -> {
+                repo.setStatus(task.id, status)
+                if (task.done) repo.setDone(task.id, false, includeSubtasks = false)
+            }
+        }
     }
 
     fun setDone(task: TaskEntity, done: Boolean, includeSubtasks: Boolean) = viewModelScope.launch {

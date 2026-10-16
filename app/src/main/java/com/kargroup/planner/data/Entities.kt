@@ -25,6 +25,19 @@ object Priority {
     fun isHighOrAbove(p: String?): Boolean = p == VERY_HIGH || p == HIGH
 }
 
+object TaskStatus {
+    const val NOT_STARTED = "not_started"
+    const val INITIATED = "initiated"
+    const val COMPLETED = "completed"
+    val ALL = listOf(NOT_STARTED, INITIATED, COMPLETED)
+
+    fun label(s: String): String = when (s) {
+        INITIATED -> "Initiated"
+        COMPLETED -> "Completed"
+        else -> "Not Started"
+    }
+}
+
 /** Activities estimated below this many minutes are scheduled first ("quick wins"). */
 const val QUICK_TASK_MINUTES = 10
 
@@ -57,6 +70,10 @@ data class TaskEntity(
     @ColumnInfo(name = "estimated_minutes") val estimatedMinutes: Int? = null,
     /** Position in the scheduler when manual sorting is used. */
     @ColumnInfo(name = "manual_order") val manualOrder: Long? = null,
+    /** Work status while open: not_started / initiated. "Completed" is derived from [done]. */
+    @ColumnInfo(name = "status") val status: String? = null,
+    /** Person the activity is assigned to (optional). */
+    @ColumnInfo(name = "assignee") val assignee: String? = null,
     @ColumnInfo(name = "is_recurring") val isRecurring: Boolean = false,
     @ColumnInfo(name = "recurrence_frequency") val recurrenceFrequency: String? = null,
     @ColumnInfo(name = "recurrence_interval") val recurrenceInterval: Int = 1,
@@ -69,6 +86,14 @@ data class TaskEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "completed_at") val completedAt: Long? = null,
 )
+
+/** Not Started / Initiated / Completed - Completed always follows the done checkbox. */
+val TaskEntity.effectiveStatus: String
+    get() = when {
+        done -> TaskStatus.COMPLETED
+        status == TaskStatus.INITIATED -> TaskStatus.INITIATED
+        else -> TaskStatus.NOT_STARTED
+    }
 
 @Entity(tableName = "projects")
 data class ProjectEntity(
