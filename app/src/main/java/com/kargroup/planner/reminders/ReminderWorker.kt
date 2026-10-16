@@ -95,7 +95,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             if (overdue > 0) add("$overdue overdue")
             val dueToday = alerts.count { it.dueDate == today }
             if (dueToday > 0) add("$dueToday due today")
-            val high = alerts.count { it.priority == Priority.HIGH }
+            val high = alerts.count { Priority.isHighOrAbove(it.priority) }
             if (high > 0) add("$high high priority")
         }.joinToString(" · ")
 

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.MoreVert
@@ -288,6 +289,39 @@ private fun EmptyState(onAdd: () -> Unit) {
     }
 }
 
+/** Accent colour for a priority, or null for Standard. */
+fun priorityColor(p: String?): Color? = when (p) {
+    Priority.VERY_HIGH -> KarColors.Crimson
+    Priority.HIGH -> KarColors.Red
+    Priority.MEDIUM -> KarColors.Amber
+    else -> null
+}
+
+/** "Today · 02:30 PM", "Mon, 19 Oct" ... */
+fun dueLabel(task: TaskEntity): String {
+    val d = Ist.friendly(task.dueDate)
+    return if (task.dueTime != null) "$d · ${formatTime12(task.dueTime)}" else d
+}
+
+@Composable
+fun PriorityPill(priority: String?) {
+    when (priority) {
+        Priority.VERY_HIGH -> MetaPill("Very High", KarColors.Crimson, dotColor = KarColors.Crimson)
+        Priority.HIGH -> MetaPill("High", KarColors.Red, dotColor = KarColors.Red)
+        Priority.MEDIUM -> MetaPill("Medium", KarColors.Amber, dotColor = KarColors.Amber)
+    }
+}
+
+@Composable
+fun EstimatePill(task: TaskEntity) {
+    val m = task.estimatedMinutes ?: return
+    if (isQuickWin(task)) {
+        MetaPill("⚡ ${formatMinutes(m)} · quick win", KarColors.Green, Icons.Outlined.Timer)
+    } else {
+        MetaPill(formatMinutes(m), KarColors.Slate, Icons.Outlined.Timer)
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TaskRow(
@@ -306,8 +340,7 @@ fun TaskRow(
 
     val stripe = when {
         task.done -> KarColors.Green
-        task.priority == Priority.HIGH -> KarColors.Red
-        task.priority == Priority.MEDIUM -> KarColors.Amber
+        priorityColor(task.priority) != null -> priorityColor(task.priority)
         overdue -> KarColors.Red
         else -> null
     }
@@ -344,11 +377,7 @@ fun TaskRow(
             onCheckedChange = { actions.onToggle(task, it) },
             colors = CheckboxDefaults.colors(
                 checkedColor = KarColors.Green,
-                uncheckedColor = when (task.priority) {
-                    Priority.HIGH -> KarColors.Red
-                    Priority.MEDIUM -> KarColors.Amber
-                    else -> KarColors.SlateLight
-                },
+                uncheckedColor = priorityColor(task.priority) ?: KarColors.SlateLight,
             ),
         )
         Column(
@@ -377,10 +406,7 @@ fun TaskRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                when (task.priority) {
-                    Priority.HIGH -> MetaPill("High", KarColors.Red, dotColor = KarColors.Red)
-                    Priority.MEDIUM -> MetaPill("Medium", KarColors.Amber, dotColor = KarColors.Amber)
-                }
+                PriorityPill(task.priority)
                 if (due != null) {
                     val color = when {
                         task.done -> KarColors.Slate
@@ -388,8 +414,9 @@ fun TaskRow(
                         due == today -> KarColors.Amber
                         else -> KarColors.Navy2
                     }
-                    MetaPill(if (overdue) "Overdue · ${Ist.friendly(due)}" else Ist.friendly(due), color, Icons.Outlined.Event)
+                    MetaPill(if (overdue) "Overdue · ${dueLabel(task)}" else dueLabel(task), color, Icons.Outlined.Event)
                 }
+                EstimatePill(task)
                 if (task.isRecurring) MetaPill(Recurrence.describe(task), KarColors.Navy2, Icons.Outlined.Repeat)
                 if (project != null) {
                     val pc = parseHexColor(project.color)

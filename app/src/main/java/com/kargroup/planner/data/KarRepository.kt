@@ -23,17 +23,6 @@ class KarRepository(private val db: KarDatabase) {
 
     suspend fun seedDefaultsIfNeeded(prefs: SharedPreferences) {
         if (prefs.getBoolean(KEY_SEEDED, false)) return
-        if (contextDao.count() == 0) {
-            contextDao.upsertAll(
-                listOf(
-                    ContextTagEntity(name = "@deep-work", color = "#1E3A6E", icon = "bolt"),
-                    ContextTagEntity(name = "@calls", color = "#10B981", icon = "phone"),
-                    ContextTagEntity(name = "@meetings", color = "#F5A623", icon = "groups"),
-                    ContextTagEntity(name = "@desk", color = "#64748B", icon = "desk"),
-                    ContextTagEntity(name = "@errands", color = "#EF4444", icon = "cart"),
-                )
-            )
-        }
         prefs.edit().putBoolean(KEY_SEEDED, true).apply()
     }
 
@@ -42,6 +31,13 @@ class KarRepository(private val db: KarDatabase) {
     suspend fun saveTask(task: TaskEntity) = taskDao.upsert(task)
 
     suspend fun setCollapsed(id: String, collapsed: Boolean) = taskDao.setCollapsed(id, collapsed)
+
+    /** Saves the scheduler's manual order: position i gets order (i + 1) * 10. */
+    suspend fun saveManualOrder(orderedIds: List<String>) {
+        db.withTransaction {
+            orderedIds.forEachIndexed { i, id -> taskDao.setManualOrder(id, (i + 1) * 10L) }
+        }
+    }
 
     suspend fun setDone(taskId: String, done: Boolean, includeSubtasks: Boolean) {
         db.withTransaction { setDoneInternal(taskId, done, includeSubtasks) }

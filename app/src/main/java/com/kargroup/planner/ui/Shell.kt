@@ -25,7 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Download
@@ -277,6 +277,7 @@ internal fun Sidebar(
         GoldButton("New Activity", onNewActivity, Modifier.fillMaxWidth(), icon = Icons.Outlined.Add, height = 46.dp)
 
         NavLabel("Views")
+        NavItem("Scheduler", Icons.Outlined.Schedule, screen == Screen.Schedule, counts.open) { onNavigate(Screen.Schedule) }
         NavItem("Today", Icons.Outlined.Today, screen == Screen.Today, counts.today) { onNavigate(Screen.Today) }
         NavItem("Inbox", Icons.Outlined.Inbox, screen == Screen.Inbox, counts.inbox) { onNavigate(Screen.Inbox) }
         NavItem("Overdue", Icons.Outlined.ReportProblem, screen == Screen.Overdue, counts.overdue, KarColors.Red) { onNavigate(Screen.Overdue) }
@@ -287,7 +288,6 @@ internal fun Sidebar(
 
         NavLabel("Organize")
         NavItem("Projects", Icons.Outlined.Folder, screen == Screen.Projects || screen is Screen.Project, null) { onNavigate(Screen.Projects) }
-        NavItem("Contexts", Icons.Outlined.AlternateEmail, screen == Screen.Contexts || screen is Screen.Context, null) { onNavigate(Screen.Contexts) }
         NavItem("Minutes of Meeting", Icons.Outlined.Groups, screen == Screen.Meetings, null) { onNavigate(Screen.Meetings) }
 
         NavLabel("Utilities")
@@ -308,15 +308,16 @@ internal fun Sidebar(
     }
 }
 
-private data class NavCounts(val today: Int, val inbox: Int, val overdue: Int, val upcoming: Int, val recurring: Int)
+private data class NavCounts(val open: Int, val today: Int, val inbox: Int, val overdue: Int, val upcoming: Int, val recurring: Int)
 
 private fun navCounts(tasks: List<TaskEntity>, today: String): NavCounts {
     val open = tasks.filter { !it.done }
     val byId = tasks.associateBy { it.id }
     val weekEnd = Ist.parse(today)?.plusDays(7)?.toString() ?: today
     return NavCounts(
+        open = open.size,
         today = open.count { it.dueDate != null && it.dueDate <= today },
-        inbox = open.count { (it.parentId == null || byId[it.parentId] == null) && it.projectId == null && it.contextId == null },
+        inbox = open.count { (it.parentId == null || byId[it.parentId] == null) && it.projectId == null },
         overdue = open.count { it.dueDate != null && it.dueDate < today },
         upcoming = open.count { val d = it.dueDate; d != null && d > today && d <= weekEnd },
         recurring = open.count { it.isRecurring },
@@ -448,6 +449,7 @@ internal fun NavRail(
             Icon(Icons.Outlined.Add, "New Activity", tint = Color.White, modifier = Modifier.size(26.dp))
         }
         Spacer(Modifier.height(14.dp))
+        RailItem("Scheduler", Icons.Outlined.Schedule, screen == Screen.Schedule) { onNavigate(Screen.Schedule) }
         RailItem("Today", Icons.Outlined.Today, screen == Screen.Today) { onNavigate(Screen.Today) }
         RailItem("Inbox", Icons.Outlined.Inbox, screen == Screen.Inbox) { onNavigate(Screen.Inbox) }
         RailItem("Overdue", Icons.Outlined.ReportProblem, screen == Screen.Overdue) { onNavigate(Screen.Overdue) }
@@ -457,7 +459,6 @@ internal fun NavRail(
         RailItem("Done", Icons.Outlined.TaskAlt, screen == Screen.Completed) { onNavigate(Screen.Completed) }
         RailDivider()
         RailItem("Projects", Icons.Outlined.Folder, screen == Screen.Projects || screen is Screen.Project) { onNavigate(Screen.Projects) }
-        RailItem("Contexts", Icons.Outlined.AlternateEmail, screen == Screen.Contexts || screen is Screen.Context) { onNavigate(Screen.Contexts) }
         RailItem("MoM", Icons.Outlined.Groups, screen == Screen.Meetings) { onNavigate(Screen.Meetings) }
         RailDivider()
         RailItem(if (alertCount > 0) "Alerts ($alertCount)" else "Alerts", Icons.Outlined.NotificationsActive, false, onClick = onReminders)

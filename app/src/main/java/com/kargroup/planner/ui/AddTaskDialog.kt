@@ -27,6 +27,12 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -58,7 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.kargroup.planner.data.ContextTagEntity
+import com.kargroup.planner.data.QUICK_TASK_MINUTES
 import com.kargroup.planner.data.Frequency
 import com.kargroup.planner.data.Priority
 import com.kargroup.planner.data.ProjectEntity
@@ -79,7 +85,6 @@ data class TaskDialogRequest(
     val existing: TaskEntity? = null,
     val parent: TaskEntity? = null,
     val defaultProjectId: String? = null,
-    val defaultContextId: String? = null,
     val defaultDueDate: String? = null,
     val defaultRecurring: Boolean = false,
 )
@@ -91,7 +96,6 @@ private val DayLetters = listOf("M", "T", "W", "T", "F", "S", "S")
 fun AddTaskDialog(
     request: TaskDialogRequest,
     projects: List<ProjectEntity>,
-    contexts: List<ContextTagEntity>,
     onDismiss: () -> Unit,
     onSave: (TaskEntity) -> Unit,
 ) {
@@ -100,9 +104,11 @@ fun AddTaskDialog(
     var title by remember { mutableStateOf(base?.text ?: "") }
     var notes by remember { mutableStateOf(base?.notes ?: "") }
     var projectId by remember { mutableStateOf(base?.projectId ?: request.defaultProjectId ?: parent?.projectId) }
-    var contextId by remember { mutableStateOf(base?.contextId ?: request.defaultContextId ?: parent?.contextId) }
     var priority by remember { mutableStateOf(base?.priority) }
     var dueDate by remember { mutableStateOf(if (base != null) base.dueDate else request.defaultDueDate) }
+    var dueTime by remember { mutableStateOf(base?.dueTime) }
+    var estimate by remember { mutableStateOf(base?.estimatedMinutes?.toString() ?: "") }
+    var showTimePicker by remember { mutableStateOf(false) }
     var recurring by remember { mutableStateOf(base?.isRecurring ?: request.defaultRecurring) }
     var frequency by remember { mutableStateOf(base?.recurrenceFrequency ?: Frequency.DAILY) }
     var interval by remember { mutableIntStateOf(base?.recurrenceInterval ?: 1) }
@@ -132,9 +138,10 @@ fun AddTaskDialog(
                 text = title.trim(),
                 notes = notes.trim().ifBlank { null },
                 projectId = projectId,
-                contextId = contextId,
                 priority = priority,
                 dueDate = if (recurring && dueDate == null) today else dueDate,
+                dueTime = if (dueDate == null && !recurring) null else dueTime,
+                estimatedMinutes = estimate.toIntOrNull()?.takeIf { it > 0 },
                 isRecurring = recurring,
                 recurrenceFrequency = if (recurring) frequency else null,
                 recurrenceInterval = if (recurring) interval.coerceAtLeast(1) else 1,
@@ -212,29 +219,45 @@ fun AddTaskDialog(
 
                 val projectOptions = listOf(SelectorOption(null, "No project", null)) +
                     projects.map { SelectorOption(it.id, it.name, parseHexColor(it.color)) }
-                val contextOptions = listOf(SelectorOption(null, "No context", null)) +
-                    contexts.map { SelectorOption(it.id, it.name, parseHexColor(it.color)) }
 
                 Spacer(Modifier.height(12.dp))
-                if (wide) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SelectorField("Project", projectOptions, projectId, { projectId = it }, Modifier.weight(1f))
-                        SelectorField("GTD Context", contextOptions, contextId, { contextId = it }, Modifier.weight(1f))
-                    }
-                } else {
-                    SelectorField("Project", projectOptions, projectId, { projectId = it }, Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(10.dp))
-                    SelectorField("GTD Context", contextOptions, contextId, { contextId = it }, Modifier.fillMaxWidth())
-                }
+                SelectorField("Project", projectOptions, projectId, { projectId = it }, Modifier.fillMaxWidth())
 
                 FieldLabel("Priority")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     PillChip("Standard", priority == null) { priority = null }
                     PillChip("🟡 Medium", priority == Priority.MEDIUM, KarColors.Amber) { priority = Priority.MEDIUM }
                     PillChip("🔴 High", priority == Priority.HIGH, KarColors.Red) { priority = Priority.HIGH }
+                    PillChip("‼️ Very High", priority == Priority.VERY_HIGH, KarColors.Crimson) { priority = Priority.VERY_HIGH }
                 }
 
-                FieldLabel("Due date")
+                FieldLabel("Estimated activity time")
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    listOf(5, 10, 15, 30, 45, 60, 90, 120).forEach { m ->
+                        PillChip(formatMinutes(m), estimate == m.toString()) { estimate = m.toString() }
+                    }
+                    PillChip("None", estimate.isBlank()) { estimate = "" }
+                }
+                OutlinedTextField(
+                    value = estimate,
+                    onValueChange = { v -> estimate = v.filter { it.isDigit() }.take(4) },
+                    label = { Text("Or type minutes") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    supportingText = {
+                        val m = estimate.toIntOrNull()
+                        if (m != null && m in 1 until QUICK_TASK_MINUTES) Text("⚡ Quick win: scheduled first")
+                    },
+                    modifier = Modifier.padding(top = 6.dp).widthIn(max = 260.dp),
+                )
+
+                FieldLabel("Target date")
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -249,6 +272,28 @@ fun AddTaskDialog(
                         label = { Text(if (custom) Ist.formatFull(dueDate) else "Pick date…") },
                         leadingIcon = { Icon(Icons.Outlined.CalendarMonth, null, Modifier.size(16.dp)) },
                         colors = chipColors(KarColors.Navy),
+                    )
+                }
+
+                FieldLabel("Target time (IST)")
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    FilterChip(
+                        selected = dueTime != null,
+                        onClick = { showTimePicker = true },
+                        label = { Text(dueTime?.let { formatTime12(it) } ?: "Set time…") },
+                        leadingIcon = { Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp)) },
+                        colors = chipColors(KarColors.Navy),
+                    )
+                    PillChip("No time", dueTime == null) { dueTime = null }
+                }
+                if (dueTime != null && dueDate == null && !recurring) {
+                    Text(
+                        "Pick a target date too, otherwise the time is ignored.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KarColors.Amber,
                     )
                 }
 
@@ -348,6 +393,25 @@ fun AddTaskDialog(
                 }
             }
         }
+    }
+
+    if (showTimePicker) {
+        val parsed = dueTime?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() } ?: java.time.LocalTime.of(10, 0)
+        val tState = rememberTimePickerState(initialHour = parsed.hour, initialMinute = parsed.minute, is24Hour = false)
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            containerColor = Color.White,
+            title = { Text("Target time (IST)") },
+            text = { TimePicker(state = tState) },
+            confirmButton = {
+                TextButton(onClick = {
+                    dueTime = "%02d:%02d".format(tState.hour, tState.minute)
+                    if (dueDate == null) dueDate = today
+                    showTimePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
+        )
     }
 
     if (showPicker) {

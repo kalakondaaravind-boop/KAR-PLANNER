@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 sealed interface Screen {
+    data object Schedule : Screen
     data object Today : Screen
     data object Inbox : Screen
     data object Overdue : Screen
@@ -35,10 +36,8 @@ sealed interface Screen {
     data object AllTasks : Screen
     data object Completed : Screen
     data object Projects : Screen
-    data object Contexts : Screen
     data object Meetings : Screen
     data class Project(val id: String) : Screen
-    data class Context(val id: String) : Screen
 }
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -56,7 +55,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val meetings: StateFlow<List<MeetingMinuteEntity>> =
         repo.meetings.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val screen = MutableStateFlow<Screen>(Screen.Today)
+    val screen = MutableStateFlow<Screen>(Screen.Schedule)
+
+    /** Scheduler sort mode: false = automatic, true = manual. Remembered between launches. */
+    val scheduleManual = MutableStateFlow(karApp.appPrefs.getBoolean(KEY_SCHEDULE_MANUAL, false))
     val drillRootId = MutableStateFlow<String?>(null)
     val showCompleted = MutableStateFlow(false)
 
@@ -98,6 +100,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         showCompleted.value = value
     }
 
+    // -------------------------------------------------------------- scheduler
+
+    fun setScheduleManual(manual: Boolean) {
+        scheduleManual.value = manual
+        karApp.appPrefs.edit().putBoolean(KEY_SCHEDULE_MANUAL, manual).apply()
+    }
+
+    /** Moves an item in the manual schedule and saves the whole order. */
+    fun moveInSchedule(orderedIds: List<String>, from: Int, to: Int) {
+        if (from !in orderedIds.indices || to !in orderedIds.indices || from == to) return
+        val list = orderedIds.toMutableList()
+        val item = list.removeAt(from)
+        list.add(to, item)
+        viewModelScope.launch { repo.saveManualOrder(list) }
+    }
+
+    /** Copies the current automatic order into the manual order. */
+    fun resetManualToAuto(autoOrderedIds: List<String>) = viewModelScope.launch {
+        repo.saveManualOrder(autoOrderedIds)
+        toast("Manual order reset to the automatic schedule")
+    }
+
     // ------------------------------------------------------------------ tasks
 
     fun saveTask(task: TaskEntity, isNew: Boolean) = viewModelScope.launch {
@@ -133,7 +157,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun saveContext(context: ContextTagEntity) = viewModelScope.launch { repo.saveContext(context) }
 
     fun deleteContext(context: ContextTagEntity) = viewModelScope.launch {
-        if (screen.value == Screen.Context(context.id)) navigate(Screen.Contexts)
         repo.deleteContext(context.id)
         toast("Context \"${context.name}\" deleted")
     }
@@ -204,5 +227,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         reminderPrefs.clear()
         navigate(Screen.Today)
         toast("All data deleted. Fresh start!")
+    }
+
+    companion object {
+        private const val KEY_SCHEDULE_MANUAL = "schedule_manual"
     }
 }

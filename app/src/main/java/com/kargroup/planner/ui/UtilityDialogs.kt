@@ -143,7 +143,9 @@ fun RemindersDialog(
                         ) {
                             Column(Modifier.padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (t.priority == Priority.HIGH) {
+                                    if (t.priority == Priority.VERY_HIGH) {
+                                        Text("‼️ ", style = MaterialTheme.typography.bodySmall)
+                                    } else if (t.priority == Priority.HIGH) {
                                         Text("🔴 ", style = MaterialTheme.typography.bodySmall)
                                     } else if (t.priority == Priority.MEDIUM) {
                                         Text("🟡 ", style = MaterialTheme.typography.bodySmall)
@@ -212,7 +214,6 @@ fun DeleteAllDialog(
                         val c = counts
                         CountRow("Activities / tasks", c?.tasks)
                         CountRow("Projects", c?.projects)
-                        CountRow("Contexts", c?.contexts)
                         CountRow("Minutes of Meeting", c?.meetings)
                     }
                 }

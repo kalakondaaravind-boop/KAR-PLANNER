@@ -124,6 +124,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
     val screen by vm.screen.collectAsStateWithLifecycle()
     val drillRootId by vm.drillRootId.collectAsStateWithLifecycle()
     val showCompleted by vm.showCompleted.collectAsStateWithLifecycle()
+    val scheduleManual by vm.scheduleManual.collectAsStateWithLifecycle()
     val today by vm.today.collectAsStateWithLifecycle()
     val reminderVersion by vm.reminderVersion.collectAsStateWithLifecycle()
 
@@ -214,7 +215,6 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                 Screen.Upcoming -> TaskDialogRequest(defaultDueDate = Ist.today().plusDays(1).toString())
                 Screen.Recurring -> TaskDialogRequest(defaultRecurring = true, defaultDueDate = today)
                 is Screen.Project -> TaskDialogRequest(defaultProjectId = s.id)
-                is Screen.Context -> TaskDialogRequest(defaultContextId = s.id)
                 else -> TaskDialogRequest()
             }
         }
@@ -268,7 +268,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                 )
             },
             floatingActionButton = {
-                if (!wide && screen != Screen.Meetings && screen != Screen.Projects && screen != Screen.Contexts) {
+                if (!wide && screen != Screen.Meetings && screen != Screen.Projects) {
                     ExtendedFloatingActionButton(
                         onClick = openAddActivity,
                         containerColor = KarColors.SkyDeep,
@@ -302,16 +302,25 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                         onEdit = { projectDialog = it; showProjectDialog = true },
                         onDelete = { deleteProjectRequest = it },
                     )
-                    Screen.Contexts -> ContextsScreen(
-                        contexts = contexts,
-                        tasks = tasks,
-                        wide = wide,
-                        header = header,
-                        onOpen = { vm.navigate(Screen.Context(it.id)) },
-                        onAdd = { contextDialog = null; showContextDialog = true },
-                        onEdit = { contextDialog = it; showContextDialog = true },
-                        onDelete = { deleteContextRequest = it },
-                    )
+                    Screen.Schedule -> {
+                        // Re-plan the time slots every minute so they always start from "now".
+                        val items = remember(index, scheduleManual, minuteTick) { buildSchedule(index, scheduleManual) }
+                        val autoIds = remember(index) { buildSchedule(index, manual = false).map { it.task.id } }
+                        SchedulerScreen(
+                            items = items,
+                            manual = scheduleManual,
+                            projects = projectMap,
+                            today = today,
+                            wide = wide,
+                            header = header,
+                            onManualChange = { vm.setScheduleManual(it) },
+                            onMove = { from, to -> vm.moveInSchedule(items.map { it.task.id }, from, to) },
+                            onResetManual = { vm.resetManualToAuto(autoIds) },
+                            onToggle = { task, checked -> taskActions.onToggle(task, checked) },
+                            onOpen = { taskDialog = TaskDialogRequest(existing = it) },
+                            onAddActivity = openAddActivity,
+                        )
+                    }
                     Screen.Meetings -> MeetingsScreen(
                         meetings = meetings,
                         projects = projectMap,
@@ -335,7 +344,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                             showCompleted = showCompleted,
                             showCompletedToggle = s != Screen.Completed,
                             projects = projectMap,
-                            contexts = contextMap,
+                            contexts = emptyMap(),
                             today = today,
                             wide = wide,
                             actions = taskActions,
@@ -442,7 +451,6 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
         AddTaskDialog(
             request = req,
             projects = projects,
-            contexts = contexts,
             onDismiss = { taskDialog = null },
             onSave = { task ->
                 vm.saveTask(task, isNew = req.existing == null)
@@ -459,13 +467,6 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
         )
     }
 
-    if (showContextDialog) {
-        ContextDialog(
-            existing = contextDialog,
-            onDismiss = { showContextDialog = false },
-            onSave = { vm.saveContext(it); showContextDialog = false },
-        )
-    }
 
     meetingEditor?.let { req ->
         // createdAt == -1 marks a "new meeting with a preset project" template.
@@ -536,16 +537,6 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
         )
     }
 
-    deleteContextRequest?.let { c ->
-        ConfirmDialog(
-            title = "Delete context?",
-            message = "\"${c.name}\" will be removed from all activities.",
-            confirmLabel = "Delete",
-            destructive = true,
-            onConfirm = { vm.deleteContext(c); deleteContextRequest = null },
-            onDismiss = { deleteContextRequest = null },
-        )
-    }
 }
 
 // =============================================================================
@@ -553,6 +544,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
 // =============================================================================
 
 fun screenTitle(screen: Screen, projects: Map<String, ProjectEntity>, contexts: Map<String, ContextTagEntity>): String = when (screen) {
+    Screen.Schedule -> "Scheduler"
     Screen.Today -> "Today"
     Screen.Inbox -> "Inbox"
     Screen.Overdue -> "Overdue"
@@ -561,10 +553,8 @@ fun screenTitle(screen: Screen, projects: Map<String, ProjectEntity>, contexts: 
     Screen.AllTasks -> "All Activities"
     Screen.Completed -> "Completed"
     Screen.Projects -> "Projects"
-    Screen.Contexts -> "Contexts"
     Screen.Meetings -> "Minutes of Meeting"
     is Screen.Project -> projects[screen.id]?.name ?: "Project"
-    is Screen.Context -> contexts[screen.id]?.name ?: "Context"
 }
 
 private fun screenSubtitle(
@@ -577,7 +567,7 @@ private fun screenSubtitle(
     val countText = "$topCount activit${if (topCount == 1) "y" else "ies"}"
     return when (screen) {
         Screen.Today -> "$countText · due today or overdue (IST)" to KarColors.Gold
-        Screen.Inbox -> "$countText · not yet assigned to a project or context" to KarColors.Navy2
+        Screen.Inbox -> "$countText · not yet assigned to a project" to KarColors.Navy2
         Screen.Overdue -> "$countText · past their due date" to KarColors.Red
         Screen.Upcoming -> "$countText · due in the next 7 days" to KarColors.Navy2
         Screen.Recurring -> "$countText · repeating on a cadence" to KarColors.Navy2
@@ -587,7 +577,6 @@ private fun screenSubtitle(
             val p = projects[screen.id]
             ((p?.description?.takeIf { it.isNotBlank() }?.let { "$it · " } ?: "") + countText) to parseHexColor(p?.color)
         }
-        is Screen.Context -> countText to parseHexColor(contexts[screen.id]?.color)
         else -> null to null
     }
 }

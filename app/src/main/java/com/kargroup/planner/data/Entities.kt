@@ -9,9 +9,24 @@ import java.util.UUID
 fun newId(): String = UUID.randomUUID().toString()
 
 object Priority {
+    const val VERY_HIGH = "very_high"
     const val HIGH = "high"
     const val MEDIUM = "medium"
+    val ALL = listOf(VERY_HIGH, HIGH, MEDIUM)
+
+    /** 0 = most urgent. */
+    fun rank(p: String?): Int = when (p) {
+        VERY_HIGH -> 0
+        HIGH -> 1
+        MEDIUM -> 2
+        else -> 3
+    }
+
+    fun isHighOrAbove(p: String?): Boolean = p == VERY_HIGH || p == HIGH
 }
+
+/** Activities estimated below this many minutes are scheduled first ("quick wins"). */
+const val QUICK_TASK_MINUTES = 10
 
 object Frequency {
     const val DAILY = "daily"
@@ -36,6 +51,12 @@ data class TaskEntity(
     @ColumnInfo(name = "priority") val priority: String? = null,
     /** 'YYYY-MM-DD' in IST */
     @ColumnInfo(name = "due_date") val dueDate: String? = null,
+    /** Target time 'HH:mm' in IST (optional). */
+    @ColumnInfo(name = "due_time") val dueTime: String? = null,
+    /** Estimated effort in minutes (optional). */
+    @ColumnInfo(name = "estimated_minutes") val estimatedMinutes: Int? = null,
+    /** Position in the scheduler when manual sorting is used. */
+    @ColumnInfo(name = "manual_order") val manualOrder: Long? = null,
     @ColumnInfo(name = "is_recurring") val isRecurring: Boolean = false,
     @ColumnInfo(name = "recurrence_frequency") val recurrenceFrequency: String? = null,
     @ColumnInfo(name = "recurrence_interval") val recurrenceInterval: Int = 1,

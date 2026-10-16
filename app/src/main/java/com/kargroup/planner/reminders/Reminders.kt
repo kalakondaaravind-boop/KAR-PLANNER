@@ -81,11 +81,11 @@ object Reminders {
         return tasks.filter { t ->
             val due = t.dueDate
             !t.done && t.id !in suppressed && due != null &&
-                (due <= today || (t.priority == Priority.HIGH && due <= tomorrow))
+                (due <= today || (Priority.isHighOrAbove(t.priority) && due <= tomorrow))
         }.sortedWith(
             compareBy<TaskEntity>(
                 { (it.dueDate ?: "") >= today },
-                { it.priority != Priority.HIGH },
+                { Priority.rank(it.priority) },
                 { it.dueDate ?: "" },
             )
         )

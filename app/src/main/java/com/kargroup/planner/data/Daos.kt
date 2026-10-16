@@ -28,6 +28,9 @@ interface TaskDao {
     @Query("DELETE FROM tasks WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)
 
+    @Query("UPDATE tasks SET manual_order = :order WHERE id = :id")
+    suspend fun setManualOrder(id: String, order: Long?)
+
     @Query("UPDATE tasks SET is_collapsed = :collapsed WHERE id = :id")
     suspend fun setCollapsed(id: String, collapsed: Boolean)
 

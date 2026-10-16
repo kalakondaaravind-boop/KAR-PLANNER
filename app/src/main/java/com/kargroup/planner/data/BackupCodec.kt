@@ -89,6 +89,9 @@ object BackupCodec {
         .put("done", t.done)
         .put("priority", t.priority ?: JSONObject.NULL)
         .put("due_date", t.dueDate ?: JSONObject.NULL)
+        .put("due_time", t.dueTime ?: JSONObject.NULL)
+        .put("estimated_minutes", t.estimatedMinutes ?: JSONObject.NULL)
+        .put("manual_order", t.manualOrder ?: JSONObject.NULL)
         .put("is_recurring", t.isRecurring)
         .put("recurrence_frequency", t.recurrenceFrequency ?: JSONObject.NULL)
         .put("recurrence_interval", t.recurrenceInterval)
@@ -133,7 +136,7 @@ object BackupCodec {
 
     private fun taskFromJson(o: JSONObject, index: Int): TaskEntity {
         val priority = o.optStringOrNull("priority")?.lowercase()
-        if (priority != null && priority != Priority.HIGH && priority != Priority.MEDIUM) {
+        if (priority != null && priority !in Priority.ALL) {
             throw IllegalArgumentException("Task #$index has an unknown priority \"$priority\".")
         }
         val due = o.optStringOrNull("due_date")
@@ -157,6 +160,9 @@ object BackupCodec {
             done = o.optBoolean("done", false),
             priority = priority,
             dueDate = due,
+            dueTime = o.optStringOrNull("due_time")?.takeIf { Regex("^\\d{2}:\\d{2}$").matches(it) },
+            estimatedMinutes = if (o.has("estimated_minutes") && !o.isNull("estimated_minutes")) o.optInt("estimated_minutes").takeIf { it > 0 } else null,
+            manualOrder = if (o.has("manual_order") && !o.isNull("manual_order")) o.optLong("manual_order") else null,
             isRecurring = o.optBoolean("is_recurring", false),
             recurrenceFrequency = freq,
             recurrenceInterval = o.optInt("recurrence_interval", 1).coerceAtLeast(1),

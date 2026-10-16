@@ -4,6 +4,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -30,6 +33,7 @@ object KarColors {
     val Card = Color(0xFFFFFFFF)
     val Border = Color(0xFFD6E8F7)
     val Red = Color(0xFFEF4444)
+    val Crimson = Color(0xFF9F1239)
     val Amber = Color(0xFFF59E0B)
     val Green = Color(0xFF10B981)
     val Slate = Color(0xFF64748B)
@@ -97,7 +101,15 @@ private val KarTypography = Typography(
     labelSmall = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.3.sp),
 )
 
+/** All text is drawn at 92% of the system font size for a slightly more compact, professional look. */
+private const val KAR_TEXT_SCALE = 0.92f
+
 @Composable
 fun KarTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = KarScheme, typography = KarTypography, content = content)
+    val density = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density, density.fontScale * KAR_TEXT_SCALE)
+    ) {
+        MaterialTheme(colorScheme = KarScheme, typography = KarTypography, content = content)
+    }
 }

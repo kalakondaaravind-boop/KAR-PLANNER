@@ -1,6 +1,7 @@
 package com.kargroup.planner.ui
 
 import com.kargroup.planner.data.Priority
+import com.kargroup.planner.data.QUICK_TASK_MINUTES
 import com.kargroup.planner.data.TaskEntity
 import com.kargroup.planner.util.Ist
 import java.time.LocalDate
@@ -21,19 +22,97 @@ data class TaskSection(
 
 enum class SectionTone { Normal, Danger, Accent }
 
-/** Ordering for top-level lists: open first, high → medium → none, earliest due date, oldest first. */
+/** Ordering for top-level lists: open first, very high → high → medium → none, earliest target date/time, oldest first. */
 val rootOrder: Comparator<TaskEntity> = compareBy<TaskEntity>(
     { it.done },
-    {
-        when (it.priority) {
-            Priority.HIGH -> 0
-            Priority.MEDIUM -> 1
-            else -> 2
-        }
-    },
+    { Priority.rank(it.priority) },
     { it.dueDate ?: "9999-99-99" },
+    { it.dueTime ?: "99:99" },
     { it.createdAt },
 )
+
+// =============================================================================
+// Automated scheduler
+// =============================================================================
+
+/** Activities with an estimate under [QUICK_TASK_MINUTES] minutes. */
+fun isQuickWin(t: TaskEntity): Boolean {
+    val m = t.estimatedMinutes ?: return false
+    return m in 1 until QUICK_TASK_MINUTES
+}
+
+/**
+ * Automatic schedule order:
+ *  1. Quick wins (estimated time under 10 minutes) first
+ *  2. Then priority: Very High → High → Medium → Standard
+ *  3. Then earliest target date, then earliest target time (no date = last)
+ */
+val scheduleOrder: Comparator<TaskEntity> = compareBy<TaskEntity>(
+    { if (isQuickWin(it)) 0 else 1 },
+    { Priority.rank(it.priority) },
+    { it.dueDate ?: "9999-99-99" },
+    { it.dueTime ?: "99:99" },
+    { it.createdAt },
+)
+
+/** Manual order: saved positions first (in order), anything new falls in after them by the automatic rules. */
+val manualScheduleOrder: Comparator<TaskEntity> = compareBy<TaskEntity>(
+    { if (it.manualOrder == null) 1 else 0 },
+    { it.manualOrder ?: 0L },
+).then(scheduleOrder)
+
+/** Minutes assumed for planning when an activity has no estimate. */
+const val DEFAULT_PLAN_MINUTES = 30
+
+data class ScheduledItem(
+    val task: TaskEntity,
+    val path: String?,
+    val startMillis: Long,
+    val endMillis: Long,
+    val estimated: Boolean,
+)
+
+/**
+ * Builds the run-sheet: every open, actionable activity (open tasks without open subtasks),
+ * ordered automatically or manually, with planned IST start/end times laid back-to-back from now.
+ */
+fun buildSchedule(index: TaskIndex, manual: Boolean, nowMillis: Long = System.currentTimeMillis()): List<ScheduledItem> {
+    val actionable = index.all.filter { t -> !t.done && index.children(t.id).none { !it.done } }
+    val ordered = actionable.sortedWith(if (manual) manualScheduleOrder else scheduleOrder)
+    // Start at the next 5-minute mark.
+    val step = 5 * 60_000L
+    var cursor = ((nowMillis + step - 1) / step) * step
+    return ordered.map { t ->
+        val mins = t.estimatedMinutes?.takeIf { it > 0 } ?: DEFAULT_PLAN_MINUTES
+        val start = cursor
+        val end = start + mins * 60_000L
+        cursor = end
+        val ancestors = index.ancestors(t.id)
+        ScheduledItem(
+            task = t,
+            path = if (ancestors.isEmpty()) null else ancestors.joinToString(" › ") { it.text },
+            startMillis = start,
+            endMillis = end,
+            estimated = t.estimatedMinutes != null,
+        )
+    }
+}
+
+private val time12 = java.time.format.DateTimeFormatter.ofPattern("hh:mm a", java.util.Locale.ENGLISH)
+
+/** "14:30" -> "02:30 PM". */
+fun formatTime12(hhmm: String): String =
+    runCatching { java.time.LocalTime.parse(hhmm).format(time12) }.getOrDefault(hhmm)
+
+fun formatMillisTime(millis: Long): String =
+    java.time.Instant.ofEpochMilli(millis).atZone(Ist.ZONE).format(time12)
+
+/** 5 -> "5 min", 60 -> "1 h", 90 -> "1 h 30". */
+fun formatMinutes(m: Int): String = when {
+    m < 60 -> "$m min"
+    m % 60 == 0 -> "${m / 60} h"
+    else -> "${m / 60} h ${m % 60}"
+}
 
 /** Subtasks keep the order they were created in. */
 val childOrder: Comparator<TaskEntity> = compareBy<TaskEntity>({ it.done }, { it.createdAt })
@@ -136,7 +215,7 @@ fun buildSections(
             }.filter { it.rows.isNotEmpty() }
         }
         Screen.Recurring -> single(index.rootsMatching { !it.done && it.isRecurring })
-        Screen.Inbox -> single(index.topLevelMatching { it.projectId == null && it.contextId == null && openOrAll(it) })
+        Screen.Inbox -> single(index.topLevelMatching { it.projectId == null && openOrAll(it) })
         Screen.AllTasks -> single(index.topLevelMatching(openOrAll))
         Screen.Completed -> listOf(
             TaskSection(
@@ -149,7 +228,6 @@ fun buildSections(
             )
         )
         is Screen.Project -> single(index.topLevelMatching { it.projectId == screen.id && openOrAll(it) })
-        is Screen.Context -> single(index.rootsMatching { it.contextId == screen.id && openOrAll(it) })
-        Screen.Projects, Screen.Contexts, Screen.Meetings -> emptyList()
+        Screen.Projects, Screen.Meetings, Screen.Schedule -> emptyList()
     }
 }
