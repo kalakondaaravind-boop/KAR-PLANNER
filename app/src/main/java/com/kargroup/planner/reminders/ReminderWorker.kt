@@ -99,14 +99,14 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             if (high > 0) add("$high high priority")
         }.joinToString(" · ")
 
-        val style = NotificationCompat.InboxStyle().setSummaryText(summary)
+        val style = NotificationCompat.InboxStyle().setSummaryText(summary.uppercase())
         alerts.take(6).forEach { t ->
             val tag = when {
                 (t.dueDate ?: today) < today -> "Overdue"
                 t.dueDate == today -> "Today"
                 else -> Ist.friendly(t.dueDate)
             }
-            style.addLine("• ${t.text}  ($tag)")
+            style.addLine("• ${t.text}  ($tag)".uppercase())
         }
 
         val openIntent = Intent(applicationContext, MainActivity::class.java).apply {
@@ -133,16 +133,16 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val notification = NotificationCompat.Builder(applicationContext, ReminderNotifications.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_kar)
             .setColor(0xFF0284C7.toInt())
-            .setContentTitle(title)
-            .setContentText(summary.ifBlank { "Tap to review your activities" })
+            .setContentTitle(title.uppercase())
+            .setContentText(summary.ifBlank { "Tap to review your activities" }.uppercase())
             .setStyle(style)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setContentIntent(contentPi)
-            .addAction(0, "Snooze 1 Hour", snoozePi)
-            .addAction(0, "Dismiss", dismissPi)
+            .addAction(0, "SNOOZE 1 HOUR", snoozePi)
+            .addAction(0, "DISMISS", dismissPi)
             .build()
 
         nm.notify(ReminderNotifications.NOTIFICATION_ID, notification)

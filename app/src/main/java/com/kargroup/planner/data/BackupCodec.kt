@@ -9,7 +9,7 @@ import org.json.JSONObject
 object BackupCodec {
 
     const val FORMAT = "kar-planner-backup"
-    const val VERSION = 1
+    const val VERSION = 2
 
     fun encode(s: BackupSnapshot): String {
         val root = JSONObject()
@@ -35,6 +35,14 @@ object BackupCodec {
                     )
                 }
             })
+            .put("history", JSONArray().apply {
+                s.history.forEach { h ->
+                    put(
+                        JSONObject().put("id", h.id).put("task_id", h.taskId).put("at", h.at)
+                            .put("kind", h.kind).put("detail", h.detail ?: JSONObject.NULL)
+                    )
+                }
+            })
             .put("journal", JSONArray().apply {
                 s.journal.forEach { j ->
                     put(
@@ -52,85 +60,330 @@ object BackupCodec {
         return root.toString(2)
     }
 
-    /** @throws IllegalArgumentException with a readable message when the file is not a valid backup. */
+    /**
+     * Reads a backup. Besides this app's own format it tolerates exports from earlier versions and
+     * similar planner apps: camelCase or snake_case keys, nested subtasks, missing ids, ISO / dd-MM-yyyy
+     * dates and different priority / status words.
+     * @throws IllegalArgumentException with a readable message when nothing usable is found.
+     */
     fun decode(raw: String): BackupSnapshot {
-        val root = try {
-            JSONObject(raw.trim())
+        val text = raw.trim().removePrefix("\uFEFF")
+        val root: JSONObject = try {
+            if (text.startsWith("[")) JSONObject().put("tasks", JSONArray(text)) else JSONObject(text)
         } catch (e: JSONException) {
             throw IllegalArgumentException("This file is not valid JSON.")
         }
-        if (!root.has("tasks") && !root.has("projects") && !root.has("meeting_minutes")) {
-            throw IllegalArgumentException("This file does not look like a KAR Planner backup.")
-        }
-        val version = root.optInt("version", 1)
-        if (version > VERSION) {
-            throw IllegalArgumentException("Backup was made by a newer version of KAR Planner (v$version).")
-        }
+        // Some exports wrap everything in { "data": { ... } } or { "state": { ... } }.
+        val r = listOf("data", "state", "backup", "planner").firstNotNullOfOrNull { k ->
+            root.optJSONObject(k)?.takeIf { it.hasAny(TASK_KEYS + PROJECT_KEYS + MEETING_KEYS) }
+        } ?: root
 
-        val tasks = root.optJSONArray("tasks").objects().mapIndexed { i, o -> taskFromJson(o, i + 1) }
-        val projects = root.optJSONArray("projects").objects().mapIndexed { i, o ->
+        val tasks = ArrayList<TaskEntity>()
+        r.firstArray(TASK_KEYS).objects().forEach { flattenTask(it, null, tasks) }
+
+        val projects = r.firstArray(PROJECT_KEYS).objects().mapNotNull { o ->
+            val name = o.str("name", "title", "label") ?: return@mapNotNull null
             ProjectEntity(
-                id = o.req("id", "Project", i + 1),
-                name = o.req("name", "Project", i + 1),
-                description = o.optStringOrNull("description"),
-                color = o.optStringOrNull("color") ?: "#1E3A6E",
-                createdAt = o.optLong("created_at", System.currentTimeMillis()),
-            )
-        }
-        val contexts = root.optJSONArray("contexts").objects().mapIndexed { i, o ->
-            ContextTagEntity(
-                id = o.req("id", "Context", i + 1),
-                name = o.req("name", "Context", i + 1),
-                color = o.optStringOrNull("color") ?: "#1E3A6E",
-                icon = o.optStringOrNull("icon") ?: "bolt",
-            )
-        }
-        val meetings = root.optJSONArray("meeting_minutes").objects().mapIndexed { i, o ->
-            MeetingMinuteEntity(
-                id = o.req("id", "Meeting", i + 1),
-                projectId = o.optStringOrNull("project_id"),
-                title = o.req("title", "Meeting", i + 1),
-                meetingDate = o.optStringOrNull("meeting_date") ?: Ist.todayStr(),
-                meetingTime = o.optStringOrNull("meeting_time") ?: "10:00",
-                durationMinutes = o.optInt("duration_minutes", 30),
-                attendees = o.optJSONArray("attendees").strings(),
-                agenda = o.optString("agenda", ""),
-                discussionNotes = o.optString("discussion_notes", ""),
-                keyDecisions = o.optJSONArray("key_decisions").strings(),
-                actionItems = o.optJSONArray("action_items")?.let { JsonCodec.actionItemsFromJson(it) } ?: emptyList(),
-                createdAt = o.optLong("created_at", System.currentTimeMillis()),
-            )
-        }
-        val journal = root.optJSONArray("journal").objects().mapIndexedNotNull { i, o ->
-            val date = o.optStringOrNull("date") ?: return@mapIndexedNotNull null
-            if (Ist.parse(date) == null) throw IllegalArgumentException("Journal entry #${i + 1} has an invalid date \"$date\".")
-            JournalEntry(
-                id = o.optStringOrNull("id") ?: newId(),
-                date = date,
-                mood = o.optStringOrNull("mood"),
-                title = o.optStringOrNull("title"),
-                content = o.optString("content", ""),
-                createdAt = o.optLong("created_at", System.currentTimeMillis()),
-                updatedAt = o.optLong("updated_at", System.currentTimeMillis()),
-            )
-        }
-        val persons = root.optJSONArray("persons").objects().mapNotNull { o ->
-            val name = o.optStringOrNull("name")?.trim()?.ifBlank { null } ?: return@mapNotNull null
-            PersonEntity(
-                id = o.optStringOrNull("id") ?: newId(),
+                id = o.str("id", "_id", "uuid") ?: newId(),
                 name = name,
-                role = o.optStringOrNull("role"),
-                email = o.optStringOrNull("email"),
-                phone = o.optStringOrNull("phone"),
-                createdAt = o.optLong("created_at", System.currentTimeMillis()),
+                description = o.str("description", "desc", "notes"),
+                color = o.str("color", "colour")?.takeIf { it.startsWith("#") } ?: "#1E3A6E",
+                createdAt = o.millis("created_at", "createdAt", "created") ?: System.currentTimeMillis(),
             )
-        }.toMutableList()
-        // Older backups: create people from names found on activities.
-        val knownNames = persons.map { it.name.lowercase() }.toMutableSet()
-        tasks.mapNotNull { it.assignee?.trim()?.ifBlank { null } }.forEach { n ->
-            if (knownNames.add(n.lowercase())) persons.add(PersonEntity(name = n))
         }
-        return BackupSnapshot(tasks, projects, contexts, meetings, journal, persons)
+        val contexts = r.firstArray(listOf("contexts", "contextTags", "context_tags", "tags")).objects().mapNotNull { o ->
+            val name = o.str("name", "title", "label") ?: return@mapNotNull null
+            ContextTagEntity(
+                id = o.str("id", "_id") ?: newId(),
+                name = name,
+                color = o.str("color")?.takeIf { it.startsWith("#") } ?: "#1E3A6E",
+                icon = o.str("icon") ?: "bolt",
+            )
+        }
+        val meetings = r.firstArray(MEETING_KEYS).objects().mapNotNull { o -> meetingFromJson(o) }
+        val journal = r.firstArray(listOf("journal", "journal_entries", "journalEntries", "diary", "entries")).objects()
+            .mapNotNull { o ->
+                val date = parseDate(o.any("date", "entry_date", "entryDate", "day")) ?: return@mapNotNull null
+                JournalEntry(
+                    id = o.str("id", "_id") ?: newId(),
+                    date = date,
+                    mood = o.str("mood"),
+                    title = o.str("title", "headline"),
+                    content = o.str("content", "text", "body", "notes") ?: "",
+                    createdAt = o.millis("created_at", "createdAt") ?: System.currentTimeMillis(),
+                    updatedAt = o.millis("updated_at", "updatedAt") ?: System.currentTimeMillis(),
+                )
+            }
+            .groupBy { it.date }.map { (_, list) -> list.maxBy { it.updatedAt } } // one per date
+
+        val persons = ArrayList<PersonEntity>()
+        r.firstArray(listOf("persons", "people", "team", "members", "assignees")).let { arr ->
+            if (arr != null) for (k in 0 until arr.length()) {
+                val v = arr.opt(k)
+                when (v) {
+                    is JSONObject -> v.str("name", "fullName", "full_name")?.let { n ->
+                        persons.add(
+                            PersonEntity(
+                                id = v.str("id", "_id") ?: newId(),
+                                name = n.trim(),
+                                role = v.str("role", "designation", "title"),
+                                email = v.str("email"),
+                                phone = v.str("phone", "mobile"),
+                                createdAt = v.millis("created_at", "createdAt") ?: System.currentTimeMillis(),
+                            )
+                        )
+                    }
+                    is String -> if (v.isNotBlank()) persons.add(PersonEntity(name = v.trim()))
+                }
+            }
+        }
+        // Make sure everyone named on an activity or action item exists in the people list.
+        val knownNames = persons.map { it.name.lowercase() }.toMutableSet()
+        (tasks.mapNotNull { it.assignee } + meetings.flatMap { m -> m.actionItems.map { it.assignee } })
+            .map { it.trim() }.filter { it.isNotEmpty() }
+            .forEach { n -> if (knownNames.add(n.lowercase())) persons.add(PersonEntity(name = n)) }
+
+        if (tasks.isEmpty() && projects.isEmpty() && meetings.isEmpty() && journal.isEmpty() && persons.isEmpty()) {
+            throw IllegalArgumentException("No activities, projects, meetings or journal entries were found in this file.")
+        }
+        val history = r.optJSONArray("history").objects().mapNotNull { o ->
+            val taskId = o.str("task_id", "taskId") ?: return@mapNotNull null
+            TaskHistoryEntity(
+                id = o.str("id") ?: newId(),
+                taskId = taskId,
+                at = o.millis("at") ?: System.currentTimeMillis(),
+                kind = o.str("kind") ?: HistoryKind.UPDATED,
+                detail = o.str("detail"),
+            )
+        }
+        return BackupSnapshot(tasks, projects, contexts, meetings, journal, persons.distinctBy { it.name.lowercase() }, history)
+    }
+
+    private val TASK_KEYS = listOf("tasks", "activities", "items", "todos", "todoItems", "task_list", "taskList")
+    private val PROJECT_KEYS = listOf("projects", "projectList", "project_list")
+    private val MEETING_KEYS = listOf("meeting_minutes", "meetingMinutes", "meetings", "moms", "minutes", "mom")
+
+    /** Adds the task and any nested "subtasks"/"children" to [out]. */
+    private fun flattenTask(o: JSONObject, parentId: String?, out: MutableList<TaskEntity>) {
+        val title = o.str("text", "title", "name", "task", "description") ?: return
+        val id = o.str("id", "_id", "uuid", "key") ?: newId()
+        val statusWord = o.str("status", "state")?.lowercase()?.replace('-', ' ')?.replace('_', ' ')
+        val done = o.bool("done", "completed", "isDone", "is_done", "isCompleted", "is_completed", "complete")
+            ?: (statusWord in setOf("done", "completed", "complete", "closed", "finished"))
+        val due = parseDate(o.any("due_date", "dueDate", "due", "target_date", "targetDate", "deadline", "date"))
+        val dueTime = parseTime(o.any("due_time", "dueTime", "target_time", "targetTime", "time"))
+            ?: parseTime(o.any("due_date", "dueDate", "due", "deadline"))
+        val freq = o.str("recurrence_frequency", "recurrenceFrequency", "frequency", "repeat", "recurrence")
+            ?.lowercase()?.let { f ->
+                when {
+                    f.startsWith("day") || f == "daily" -> Frequency.DAILY
+                    f.startsWith("biweek") || f.contains("fortnight") -> Frequency.BIWEEKLY
+                    f.startsWith("week") -> Frequency.WEEKLY
+                    f.startsWith("month") -> Frequency.MONTHLY
+                    else -> null
+                }
+            }
+        val recurring = o.bool("is_recurring", "isRecurring", "recurring") ?: (freq != null)
+        val days = o.optJSONArray(o.firstKey("recurrence_days_of_week", "recurrenceDaysOfWeek", "daysOfWeek", "days"))?.let { arr ->
+            List(arr.length()) { arr.optInt(it, 0) }.filter { it in 1..7 }
+        }
+        val isOpenStarted = statusWord in setOf("initiated", "in progress", "inprogress", "started", "ongoing", "doing", "active", "wip")
+        val estimate = o.num("estimated_minutes", "estimatedMinutes", "estimate", "estimate_minutes", "duration_minutes", "durationMinutes", "duration")?.toInt()?.takeIf { it > 0 }
+
+        out.add(
+            TaskEntity(
+                id = id,
+                parentId = parentId ?: o.str("parent_id", "parentId", "parent"),
+                projectId = o.str("project_id", "projectId", "project"),
+                contextId = o.str("context_id", "contextId"),
+                text = title.trim(),
+                notes = o.str("notes", "note", "details", "remarks_text")?.takeIf { it != title },
+                done = done,
+                priority = parsePriority(o.any("priority", "prio", "importance")),
+                dueDate = due,
+                dueTime = if (due != null) dueTime else null,
+                estimatedMinutes = estimate,
+                status = if (isOpenStarted) TaskStatus.INITIATED else o.str("status")?.takeIf { it in TaskStatus.ALL && it != TaskStatus.COMPLETED },
+                assignee = o.str("assignee", "assignedTo", "assigned_to", "owner", "person", "responsible")?.trim()?.ifBlank { null },
+                completionRemarks = o.str("completion_remarks", "completionRemarks", "remarks", "closing_remarks"),
+                plannedStart = o.millis("planned_start", "plannedStart"),
+                manualOrder = o.num("manual_order", "manualOrder")?.toLong(),
+                isRecurring = recurring && freq != null,
+                recurrenceFrequency = if (recurring) freq else null,
+                recurrenceInterval = (o.num("recurrence_interval", "recurrenceInterval", "interval")?.toInt() ?: 1).coerceAtLeast(1),
+                recurrenceDaysOfWeek = days?.takeIf { it.isNotEmpty() },
+                meetingId = o.str("meeting_id", "meetingId"),
+                meetingActionItemId = o.str("meeting_action_item_id", "meetingActionItemId"),
+                isCollapsed = o.bool("is_collapsed", "isCollapsed", "collapsed") ?: false,
+                createdAt = o.millis("created_at", "createdAt", "created") ?: System.currentTimeMillis(),
+                completedAt = if (done) (o.millis("completed_at", "completedAt", "doneAt") ?: System.currentTimeMillis()) else null,
+            )
+        )
+        listOf("subtasks", "subTasks", "children", "items", "steps").forEach { k ->
+            o.optJSONArray(k)?.objects()?.forEach { flattenTask(it, id, out) }
+        }
+    }
+
+    private fun meetingFromJson(o: JSONObject): MeetingMinuteEntity? {
+        val title = o.str("title", "name", "subject") ?: return null
+        val itemsArr = o.optJSONArray(o.firstKey("action_items", "actionItems", "actions", "tasks"))
+        val items = itemsArr.objects().mapNotNull { a ->
+            val desc = a.str("description", "text", "title", "task", "action") ?: return@mapNotNull null
+            MeetingActionItem(
+                id = a.str("id", "_id") ?: newId(),
+                description = desc,
+                assignee = a.str("assignee", "owner", "assignedTo", "assigned_to", "responsible") ?: "",
+                dueDate = parseDate(a.any("due_date", "dueDate", "due", "deadline")),
+                completed = a.bool("completed", "done", "isDone") ?: false,
+            )
+        }
+        return MeetingMinuteEntity(
+            id = o.str("id", "_id") ?: newId(),
+            projectId = o.str("project_id", "projectId", "project"),
+            title = title,
+            meetingDate = parseDate(o.any("meeting_date", "meetingDate", "date")) ?: Ist.todayStr(),
+            meetingTime = parseTime(o.any("meeting_time", "meetingTime", "time", "date")) ?: "10:00",
+            durationMinutes = o.num("duration_minutes", "durationMinutes", "duration")?.toInt() ?: 30,
+            attendees = o.list("attendees", "participants", "members"),
+            agenda = o.list("agenda", "agendaItems", "agenda_items").joinToString("\n"),
+            discussionNotes = o.str("discussion_notes", "discussionNotes", "discussion", "notes", "minutes") ?: "",
+            keyDecisions = o.list("key_decisions", "keyDecisions", "decisions"),
+            actionItems = items,
+            createdAt = o.millis("created_at", "createdAt") ?: System.currentTimeMillis(),
+        )
+    }
+
+    // ------------------------------------------------------- tolerant readers
+
+    private fun JSONObject.hasAny(keys: List<String>) = keys.any { has(it) }
+
+    private fun JSONObject.firstKey(vararg keys: String): String = keys.firstOrNull { has(it) && !isNull(it) } ?: keys.first()
+
+    private fun JSONObject.firstArray(keys: List<String>): JSONArray? =
+        keys.firstNotNullOfOrNull { k -> optJSONArray(k) ?: optJSONObject(k)?.let { obj -> objectValues(obj) } }
+
+    /** Some apps store collections as { id: {...}, id2: {...} }. */
+    private fun objectValues(obj: JSONObject): JSONArray? {
+        val arr = JSONArray()
+        obj.keys().forEach { k -> obj.optJSONObject(k)?.let { v -> if (!v.has("id")) v.put("id", k); arr.put(v) } }
+        return if (arr.length() > 0) arr else null
+    }
+
+    private fun JSONObject.any(vararg keys: String): Any? =
+        keys.firstNotNullOfOrNull { k -> if (has(k) && !isNull(k)) opt(k) else null }
+
+    private fun JSONObject.str(vararg keys: String): String? = when (val v = any(*keys)) {
+        null -> null
+        is String -> v.trim().ifBlank { null }
+        is Number, is Boolean -> v.toString()
+        is JSONObject -> v.optString("name").ifBlank { null } ?: v.optString("id").ifBlank { null }
+        else -> null
+    }
+
+    private fun JSONObject.num(vararg keys: String): Double? = when (val v = any(*keys)) {
+        is Number -> v.toDouble()
+        is String -> v.trim().replace(Regex("[^0-9.]"), "").toDoubleOrNull()
+        else -> null
+    }
+
+    private fun JSONObject.bool(vararg keys: String): Boolean? = when (val v = any(*keys)) {
+        is Boolean -> v
+        is Number -> v.toInt() != 0
+        is String -> when (v.trim().lowercase()) {
+            "true", "yes", "y", "1", "done", "completed" -> true
+            "false", "no", "n", "0", "" -> false
+            else -> null
+        }
+        else -> null
+    }
+
+    private fun JSONObject.millis(vararg keys: String): Long? = when (val v = any(*keys)) {
+        is Number -> v.toLong().let { if (it in 1..99_999_999_999L) it * 1000 else it } // seconds -> ms
+        is String -> v.trim().toLongOrNull()?.let { if (it < 100_000_000_000L) it * 1000 else it }
+            ?: runCatching { java.time.OffsetDateTime.parse(v).toInstant().toEpochMilli() }.getOrNull()
+            ?: runCatching { java.time.Instant.parse(v).toEpochMilli() }.getOrNull()
+            ?: runCatching { java.time.LocalDateTime.parse(v).atZone(Ist.ZONE).toInstant().toEpochMilli() }.getOrNull()
+            ?: parseDate(v)?.let { java.time.LocalDate.parse(it).atStartOfDay(Ist.ZONE).toInstant().toEpochMilli() }
+        else -> null
+    }
+
+    private fun JSONObject.list(vararg keys: String): List<String> = when (val v = any(*keys)) {
+        is JSONArray -> List(v.length()) { i ->
+            when (val e = v.opt(i)) {
+                is JSONObject -> e.optString("name").ifBlank { e.optString("text") }
+                null -> ""
+                else -> e.toString()
+            }.trim()
+        }.filter { it.isNotEmpty() }
+        is String -> v.split(Regex("[\n;]|,(?=\\s*[A-Za-z])")).map { it.trim().removePrefix("-").removePrefix("•").trim() }.filter { it.isNotEmpty() }
+        else -> emptyList()
+    }
+
+    /** Accepts YYYY-MM-DD, ISO date-times, dd/MM/yyyy, dd-MM-yyyy, dd.MM.yyyy and epoch numbers; returns YYYY-MM-DD (IST). */
+    fun parseDate(v: Any?): String? {
+        when (v) {
+            null -> return null
+            is Number -> {
+                val n = v.toLong()
+                val ms = if (n < 100_000_000_000L) n * 1000 else n
+                return java.time.Instant.ofEpochMilli(ms).atZone(Ist.ZONE).toLocalDate().toString()
+            }
+            is String -> {
+                val s = v.trim()
+                if (s.isEmpty()) return null
+                Ist.parse(s)?.let { return it.toString() }
+                // ISO date-time with zone: convert to IST date.
+                runCatching { return java.time.OffsetDateTime.parse(s).atZoneSameInstant(Ist.ZONE).toLocalDate().toString() }
+                runCatching { return java.time.Instant.parse(s).atZone(Ist.ZONE).toLocalDate().toString() }
+                Regex("^(\\d{4})-(\\d{1,2})-(\\d{1,2})").find(s)?.let { m ->
+                    return runCatching {
+                        java.time.LocalDate.of(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt()).toString()
+                    }.getOrNull()
+                }
+                Regex("^(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{2,4})").find(s)?.let { m ->
+                    var y = m.groupValues[3].toInt()
+                    if (y < 100) y += 2000
+                    return runCatching {
+                        java.time.LocalDate.of(y, m.groupValues[2].toInt(), m.groupValues[1].toInt()).toString() // day first (India)
+                    }.getOrNull()
+                }
+                return s.toLongOrNull()?.let { parseDate(it) }
+            }
+            else -> return null
+        }
+    }
+
+    /** Accepts "14:30", "9:05", "02:30 PM" and ISO date-times; returns HH:mm or null. */
+    fun parseTime(v: Any?): String? {
+        val s = (v as? String)?.trim() ?: return null
+        runCatching {
+            if (s.contains('T')) {
+                val t = runCatching { java.time.OffsetDateTime.parse(s).atZoneSameInstant(Ist.ZONE).toLocalTime() }.getOrNull()
+                    ?: java.time.LocalDateTime.parse(s).toLocalTime()
+                return if (t.hour == 0 && t.minute == 0) null else "%02d:%02d".format(t.hour, t.minute)
+            }
+        }
+        val m = Regex("^(\\d{1,2}):(\\d{2})(?::\\d{2})?\\s*([AaPp][Mm])?$").find(s) ?: return null
+        var h = m.groupValues[1].toInt()
+        val min = m.groupValues[2].toInt()
+        val ap = m.groupValues[3].lowercase()
+        if (ap == "pm" && h < 12) h += 12
+        if (ap == "am" && h == 12) h = 0
+        return if (h in 0..23 && min in 0..59) "%02d:%02d".format(h, min) else null
+    }
+
+    fun parsePriority(v: Any?): String? {
+        val s = when (v) {
+            is Number -> when (v.toInt()) { 0, 1 -> "very high"; 2 -> "high"; 3 -> "medium"; else -> "" }
+            is String -> v
+            else -> return null
+        }.trim().lowercase().replace('_', ' ').replace('-', ' ')
+        return when (s) {
+            "very high", "veryhigh", "urgent", "critical", "highest", "p0", "top" -> Priority.VERY_HIGH
+            "high", "p1", "important" -> Priority.HIGH
+            "medium", "med", "moderate", "p2" -> Priority.MEDIUM
+            else -> null // standard / low / none / normal
+        }
     }
 
     // ---------------------------------------------------------------- encode
@@ -148,6 +401,8 @@ object BackupCodec {
         .put("due_time", t.dueTime ?: JSONObject.NULL)
         .put("estimated_minutes", t.estimatedMinutes ?: JSONObject.NULL)
         .put("manual_order", t.manualOrder ?: JSONObject.NULL)
+        .put("completion_remarks", t.completionRemarks ?: JSONObject.NULL)
+        .put("planned_start", t.plannedStart ?: JSONObject.NULL)
         .put("status", t.status ?: JSONObject.NULL)
         .put("assignee", t.assignee ?: JSONObject.NULL)
         .put("is_recurring", t.isRecurring)
@@ -192,64 +447,10 @@ object BackupCodec {
 
     // ---------------------------------------------------------------- decode
 
-    private fun taskFromJson(o: JSONObject, index: Int): TaskEntity {
-        val priority = o.optStringOrNull("priority")?.lowercase()
-        if (priority != null && priority !in Priority.ALL) {
-            throw IllegalArgumentException("Task #$index has an unknown priority \"$priority\".")
-        }
-        val due = o.optStringOrNull("due_date")
-        if (due != null && Ist.parse(due) == null) {
-            throw IllegalArgumentException("Task #$index has an invalid due date \"$due\" (expected YYYY-MM-DD).")
-        }
-        val freq = o.optStringOrNull("recurrence_frequency")
-        if (freq != null && freq !in Frequency.ALL) {
-            throw IllegalArgumentException("Task #$index has an unknown recurrence \"$freq\".")
-        }
-        val days = o.optJSONArray("recurrence_days_of_week")?.let { arr ->
-            List(arr.length()) { arr.getInt(it) }.filter { it in 1..7 }
-        }
-        return TaskEntity(
-            id = o.req("id", "Task", index),
-            parentId = o.optStringOrNull("parent_id"),
-            projectId = o.optStringOrNull("project_id"),
-            contextId = o.optStringOrNull("context_id"),
-            text = o.req("text", "Task", index),
-            notes = o.optStringOrNull("notes"),
-            done = o.optBoolean("done", false),
-            priority = priority,
-            dueDate = due,
-            dueTime = o.optStringOrNull("due_time")?.takeIf { Regex("^\\d{2}:\\d{2}$").matches(it) },
-            estimatedMinutes = if (o.has("estimated_minutes") && !o.isNull("estimated_minutes")) o.optInt("estimated_minutes").takeIf { it > 0 } else null,
-            status = o.optStringOrNull("status")?.takeIf { it in TaskStatus.ALL },
-            assignee = o.optStringOrNull("assignee")?.trim()?.ifBlank { null },
-            manualOrder = if (o.has("manual_order") && !o.isNull("manual_order")) o.optLong("manual_order") else null,
-            isRecurring = o.optBoolean("is_recurring", false),
-            recurrenceFrequency = freq,
-            recurrenceInterval = o.optInt("recurrence_interval", 1).coerceAtLeast(1),
-            recurrenceDaysOfWeek = days,
-            meetingId = o.optStringOrNull("meeting_id"),
-            meetingActionItemId = o.optStringOrNull("meeting_action_item_id"),
-            isCollapsed = o.optBoolean("is_collapsed", false),
-            createdAt = o.optLong("created_at", System.currentTimeMillis()),
-            completedAt = if (o.has("completed_at") && !o.isNull("completed_at")) o.optLong("completed_at") else null,
-        )
-    }
-
-    private fun JSONObject.req(key: String, kind: String, index: Int): String {
-        val v = optStringOrNull(key)
-        if (v.isNullOrBlank()) throw IllegalArgumentException("$kind #$index is missing \"$key\".")
-        return v
-    }
-
     private fun JSONArray?.objects(): List<JSONObject> {
         if (this == null) return emptyList()
         return List(length()) { i ->
-            optJSONObject(i) ?: throw IllegalArgumentException("Entry #${i + 1} is not a JSON object.")
+            optJSONObject(i) ?: JSONObject()
         }
-    }
-
-    private fun JSONArray?.strings(): List<String> {
-        if (this == null) return emptyList()
-        return List(length()) { optString(it, "") }.filter { it.isNotBlank() }
     }
 }

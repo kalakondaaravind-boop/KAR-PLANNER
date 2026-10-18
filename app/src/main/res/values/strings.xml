@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">KAR Planner</string>
+    <string name="widget_description">KAR Planner · your next 3 scheduled activities</string>
 </resources>

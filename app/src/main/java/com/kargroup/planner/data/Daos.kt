@@ -31,6 +31,12 @@ interface TaskDao {
     @Query("UPDATE tasks SET assignee = :newName WHERE LOWER(TRIM(assignee)) = LOWER(TRIM(:oldName))")
     suspend fun renameAssignee(oldName: String, newName: String?)
 
+    @Query("UPDATE tasks SET planned_start = :start WHERE id = :id")
+    suspend fun setPlannedStart(id: String, start: Long?)
+
+    @Query("UPDATE tasks SET completion_remarks = :remarks WHERE id = :id")
+    suspend fun setRemarks(id: String, remarks: String?)
+
     @Query("UPDATE tasks SET status = :status WHERE id = :id")
     suspend fun setStatus(id: String, status: String?)
 
@@ -179,5 +185,26 @@ interface PersonDao {
     suspend fun count(): Int
 
     @Query("DELETE FROM persons")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface HistoryDao {
+    @Query("SELECT * FROM task_history WHERE task_id = :taskId ORDER BY at DESC")
+    fun observeForTask(taskId: String): Flow<List<TaskHistoryEntity>>
+
+    @Query("SELECT * FROM task_history")
+    suspend fun getAll(): List<TaskHistoryEntity>
+
+    @Upsert
+    suspend fun upsert(entry: TaskHistoryEntity)
+
+    @Upsert
+    suspend fun upsertAll(entries: List<TaskHistoryEntity>)
+
+    @Query("DELETE FROM task_history WHERE task_id IN (:taskIds)")
+    suspend fun deleteForTasks(taskIds: List<String>)
+
+    @Query("DELETE FROM task_history")
     suspend fun deleteAll()
 }

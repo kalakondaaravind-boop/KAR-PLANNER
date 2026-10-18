@@ -38,9 +38,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import com.kargroup.planner.ui.components.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.kargroup.planner.ui.components.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
@@ -102,9 +102,10 @@ fun JournalScreen(
     wide: Boolean,
     onSave: (date: String, mood: String?, title: String?, content: String, quiet: Boolean) -> Unit,
     onDelete: (JournalEntry) -> Unit,
+    initialDate: String? = null,
 ) {
     val hPad = if (wide) 24.dp else 12.dp
-    var selectedDate by rememberSaveable { mutableStateOf(today) }
+    var selectedDate by rememberSaveable(initialDate) { mutableStateOf(initialDate ?: today) }
     val existing = entries.firstOrNull { it.date == selectedDate }
 
     // Editor fields reload whenever the date (or the saved entry) changes.

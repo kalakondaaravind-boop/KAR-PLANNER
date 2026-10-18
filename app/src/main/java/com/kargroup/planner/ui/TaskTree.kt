@@ -3,6 +3,8 @@ package com.kargroup.planner.ui
 import com.kargroup.planner.data.Priority
 import com.kargroup.planner.data.QUICK_TASK_MINUTES
 import com.kargroup.planner.data.TaskStatus
+import com.kargroup.planner.data.PlannerSettings
+import com.kargroup.planner.data.MeetingMinuteEntity
 import com.kargroup.planner.data.TaskEntity
 import com.kargroup.planner.util.Ist
 import java.time.LocalDate
@@ -51,14 +53,14 @@ fun isQuickWin(t: TaskEntity): Boolean {
 /**
  * Automatic schedule order:
  *  1. Quick wins (estimated time under 10 minutes) first
- *  2. Then priority: Very High → High → Medium → Standard
- *  3. Then earliest target date, then earliest target time (no date = last)
+ *  2. Then earliest target date, then earliest target time (no date = last)
+ *  3. Then priority: Very High → High → Medium → Standard
  */
 val scheduleOrder: Comparator<TaskEntity> = compareBy<TaskEntity>(
     { if (isQuickWin(it)) 0 else 1 },
-    { Priority.rank(it.priority) },
     { it.dueDate ?: "9999-99-99" },
     { it.dueTime ?: "99:99" },
+    { Priority.rank(it.priority) },
     { it.createdAt },
 )
 
@@ -77,32 +79,144 @@ data class ScheduledItem(
     val startMillis: Long,
     val endMillis: Long,
     val estimated: Boolean,
+    /** IST date ('YYYY-MM-DD') the activity is planned on. */
+    val day: String,
+    /** True when the user fixed the start time (drag-and-drop or "Set time"). */
+    val pinned: Boolean = false,
+    /** True when the activity is longer than any free slot and had to run over a break/meeting. */
+    val overflow: Boolean = false,
 )
 
+/** Time that can't be used for activities: meetings and breaks. */
+data class ScheduleBlock(
+    val kind: String,
+    val title: String,
+    val startMillis: Long,
+    val endMillis: Long,
+    val day: String,
+    val meetingId: String? = null,
+)
+
+data class ScheduleResult(val items: List<ScheduledItem>, val blocks: List<ScheduleBlock>)
+
+object BlockKind {
+    const val MEETING = "meeting"
+    const val BREAK = "break"
+}
+
 /**
- * Builds the run-sheet: every open, actionable activity (open tasks without open subtasks),
- * ordered automatically or manually, with planned IST start/end times laid back-to-back from now.
+ * Builds the plan: every open, actionable activity (open tasks without open subtasks), ordered
+ * automatically or manually, booked inside the working hours of working days (IST), around
+ * meetings, the break and any activities whose time the user fixed. Today starts from "now".
  */
-fun buildSchedule(index: TaskIndex, manual: Boolean, nowMillis: Long = System.currentTimeMillis()): List<ScheduledItem> {
-    val actionable = index.all.filter { t -> !t.done && index.children(t.id).none { !it.done } }
-    val ordered = actionable.sortedWith(if (manual) manualScheduleOrder else scheduleOrder)
-    // Start at the next 5-minute mark.
-    val step = 5 * 60_000L
-    var cursor = ((nowMillis + step - 1) / step) * step
-    return ordered.map { t ->
-        val mins = t.estimatedMinutes?.takeIf { it > 0 } ?: DEFAULT_PLAN_MINUTES
-        val start = cursor
-        val end = start + mins * 60_000L
-        cursor = end
-        val ancestors = index.ancestors(t.id)
-        ScheduledItem(
-            task = t,
-            path = if (ancestors.isEmpty()) null else ancestors.joinToString(" › ") { it.text },
-            startMillis = start,
-            endMillis = end,
-            estimated = t.estimatedMinutes != null,
-        )
+fun buildSchedule(
+    index: TaskIndex,
+    manual: Boolean,
+    settings: PlannerSettings,
+    meetings: List<MeetingMinuteEntity>,
+    nowMillis: Long = System.currentTimeMillis(),
+): ScheduleResult {
+    val zone = Ist.ZONE
+    fun at(d: LocalDate, minutes: Int): Long = d.atStartOfDay(zone).plusMinutes(minutes.toLong()).toInstant().toEpochMilli()
+    fun dayOf(ms: Long): LocalDate = java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
+    val today = dayOf(nowMillis)
+
+    // Meetings block their slot.
+    val blocks = ArrayList<ScheduleBlock>()
+    meetings.forEach { m ->
+        val d = Ist.parse(m.meetingDate) ?: return@forEach
+        val t = runCatching { java.time.LocalTime.parse(m.meetingTime) }.getOrNull() ?: return@forEach
+        val start = at(d, t.hour * 60 + t.minute)
+        val end = start + m.durationMinutes.coerceAtLeast(5) * 60_000L
+        blocks.add(ScheduleBlock(BlockKind.MEETING, m.title, start, end, d.toString(), m.id))
     }
+    val busy = HashMap<LocalDate, MutableList<Pair<Long, Long>>>()
+    fun busyOn(d: LocalDate): MutableList<Pair<Long, Long>> = busy.getOrPut(d) {
+        val list = ArrayList<Pair<Long, Long>>()
+        blocks.filter { it.day == d.toString() }.forEach { list.add(it.startMillis to it.endMillis) }
+        if (settings.breakEnabled && settings.breakEnd > settings.breakStart) {
+            list.add(at(d, settings.breakStart) to at(d, settings.breakEnd))
+        }
+        list
+    }
+
+    val actionable = index.all.filter { t -> !t.done && index.children(t.id).none { !it.done } }
+    fun minsOf(t: TaskEntity) = t.estimatedMinutes?.takeIf { it > 0 } ?: DEFAULT_PLAN_MINUTES
+    fun pathOf(t: TaskEntity): String? = index.ancestors(t.id).takeIf { it.isNotEmpty() }?.joinToString(" › ") { it.text }
+
+    val result = ArrayList<ScheduledItem>()
+
+    // 1. Activities the user fixed in time (today or later) keep their slot.
+    val pinned = actionable.filter { t -> t.plannedStart?.let { !dayOf(it).isBefore(today) } == true }
+    pinned.forEach { t ->
+        val start = t.plannedStart!!
+        val end = start + minsOf(t) * 60_000L
+        busyOn(dayOf(start)).add(start to end)
+        result.add(ScheduledItem(t, pathOf(t), start, end, t.estimatedMinutes != null, dayOf(start).toString(), pinned = true))
+    }
+
+    // 2. Everything else flows into the free working time, in priority order.
+    val pinnedIds = pinned.map { it.id }.toHashSet()
+    val ordered = actionable.filter { it.id !in pinnedIds }.sortedWith(if (manual) manualScheduleOrder else scheduleOrder)
+
+    fun freeSegments(d: LocalDate, from: Long): List<Pair<Long, Long>> {
+        if (!settings.isWorkingDay(d)) return emptyList()
+        val winStart = maxOf(at(d, settings.workStart), from)
+        val winEnd = at(d, settings.workEnd)
+        if (winStart >= winEnd) return emptyList()
+        val taken = busyOn(d).filter { it.second > winStart && it.first < winEnd }.sortedBy { it.first }
+        val out = ArrayList<Pair<Long, Long>>()
+        var c = winStart
+        taken.forEach { (s, e) ->
+            if (s > c) out.add(c to minOf(s, winEnd))
+            if (e > c) c = e
+        }
+        if (c < winEnd) out.add(c to winEnd)
+        return out
+    }
+
+    val step = 5 * 60_000L
+    var day = today
+    var cursor = ((nowMillis + step - 1) / step) * step
+    ordered.forEach { t ->
+        val dur = minsOf(t) * 60_000L
+        var placed: Pair<Long, Long>? = null
+        var overflow = false
+        var d = day
+        var from = cursor
+        var guard = 0
+        while (placed == null && guard < 400) {
+            val seg = freeSegments(d, from).firstOrNull { it.second - it.first >= dur }
+            if (seg != null) placed = seg.first to seg.first + dur
+            else {
+                d = d.plusDays(1)
+                from = at(d, 0)
+                guard++
+            }
+        }
+        if (placed == null) {
+            // Longer than any free slot: start at the next free moment and run over.
+            d = day
+            from = cursor
+            guard = 0
+            while (placed == null && guard < 400) {
+                val seg = freeSegments(d, from).firstOrNull()
+                if (seg != null) placed = seg.first to seg.first + dur
+                else {
+                    d = d.plusDays(1)
+                    from = at(d, 0)
+                    guard++
+                }
+            }
+            overflow = true
+        }
+        val (start, end) = placed ?: (cursor to cursor + dur)
+        busyOn(dayOf(start)).add(start to end)
+        day = dayOf(start)
+        cursor = end
+        result.add(ScheduledItem(t, pathOf(t), start, end, t.estimatedMinutes != null, day.toString(), overflow = overflow))
+    }
+    return ScheduleResult(result.sortedBy { it.startMillis }, blocks)
 }
 
 private val time12 = java.time.format.DateTimeFormatter.ofPattern("hh:mm a", java.util.Locale.ENGLISH)
@@ -110,6 +224,11 @@ private val time12 = java.time.format.DateTimeFormatter.ofPattern("hh:mm a", jav
 /** "14:30" -> "02:30 PM". */
 fun formatTime12(hhmm: String): String =
     runCatching { java.time.LocalTime.parse(hhmm).format(time12) }.getOrDefault(hhmm)
+
+private val time24 = java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.ENGLISH)
+
+fun formatMillisTime24(millis: Long): String =
+    java.time.Instant.ofEpochMilli(millis).atZone(Ist.ZONE).format(time24)
 
 fun formatMillisTime(millis: Long): String =
     java.time.Instant.ofEpochMilli(millis).atZone(Ist.ZONE).format(time12)
@@ -249,6 +368,7 @@ fun buildSections(
                     if (showCompleted) index.buildRows(index.rootsMatching { mine(it) && it.done }.sortedByDescending { it.completedAt ?: 0L }, true, flat = true) else emptyList()),
             ).filter { it.rows.isNotEmpty() }
         }
-        Screen.Projects, Screen.Meetings, Screen.Schedule, Screen.Journal, Screen.People -> emptyList()
+        Screen.Projects, Screen.Meetings, Screen.Schedule, Screen.Journal, Screen.People,
+        Screen.Reports, Screen.Search, Screen.Settings -> emptyList()
     }
 }

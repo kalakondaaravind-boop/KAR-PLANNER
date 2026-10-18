@@ -49,11 +49,11 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import com.kargroup.planner.ui.components.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
+import com.kargroup.planner.ui.components.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
@@ -78,6 +78,7 @@ import com.kargroup.planner.data.TaskStatus
 import com.kargroup.planner.data.PersonEntity
 import com.kargroup.planner.data.effectiveStatus
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.History
 import com.kargroup.planner.data.Frequency
 import com.kargroup.planner.data.Priority
 import com.kargroup.planner.data.ProjectEntity
@@ -122,8 +123,9 @@ fun AddTaskDialog(
     people: List<PersonEntity>,
     onAddPerson: (PersonEntity) -> Unit,
     existingSubtasks: List<TaskEntity> = emptyList(),
+    history: List<com.kargroup.planner.data.TaskHistoryEntity> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (task: TaskEntity, completed: Boolean, subtasks: List<SubtaskDraft>, removedSubtaskIds: List<String>) -> Unit,
+    onSave: (task: TaskEntity, completed: Boolean, subtasks: List<SubtaskDraft>, removedSubtaskIds: List<String>, rescheduleReason: String?) -> Unit,
 ) {
     val base = request.existing
     val parent = request.parent
@@ -151,6 +153,9 @@ fun AddTaskDialog(
     var days by remember { mutableStateOf(base?.recurrenceDaysOfWeek?.toSet() ?: emptySet()) }
     var showPicker by remember { mutableStateOf(false) }
     var titleError by remember { mutableStateOf(false) }
+    var rescheduleReason by remember { mutableStateOf("") }
+    var reasonError by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val wide = LocalConfiguration.current.screenWidthDp >= 600
 
@@ -161,10 +166,17 @@ fun AddTaskDialog(
 
     val today = Ist.todayStr()
     val tomorrow = Ist.today().plusDays(1).toString()
+    // Moving the target of an overdue activity needs a reason (kept in its history).
+    val wasOverdue = base != null && !base.done && base.dueDate != null && base.dueDate < today
+    val needsReason = wasOverdue && status != TaskStatus.COMPLETED && (dueDate != base?.dueDate || dueTime != base?.dueTime)
 
     fun submit() {
         if (title.isBlank()) {
             titleError = true
+            return
+        }
+        if (needsReason && rescheduleReason.isBlank()) {
+            reasonError = true
             return
         }
         val weeklyKind = frequency == Frequency.WEEKLY || frequency == Frequency.BIWEEKLY
@@ -188,6 +200,7 @@ fun AddTaskDialog(
             status == TaskStatus.COMPLETED,
             subtasks.filter { it.text.isNotBlank() }.map { it.copy(text = it.text.trim(), assignee = it.assignee.trim()) },
             removedSubtaskIds.toList() + subtasks.filter { it.text.isBlank() && it.id != null }.mapNotNull { it.id },
+            if (needsReason) rescheduleReason.trim() else null,
         )
     }
 
@@ -350,6 +363,39 @@ fun AddTaskDialog(
                     )
                     PillChip("No time", dueTime == null) { dueTime = null }
                 }
+                if (needsReason) {
+                    Surface(
+                        color = KarColors.Amber.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                "This activity was overdue (${dueLabel(base!!)}). Why is the target moving?",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KarColors.Ink,
+                            )
+                            FlowRow(
+                                Modifier.padding(top = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                RescheduleReasons.forEach { r ->
+                                    PillChip(r, rescheduleReason.equals(r, true), KarColors.Amber) { rescheduleReason = r; reasonError = false }
+                                }
+                            }
+                            OutlinedTextField(
+                                value = rescheduleReason,
+                                onValueChange = { rescheduleReason = it; if (it.isNotBlank()) reasonError = false },
+                                label = { Text("Reason for delay *") },
+                                isError = reasonError,
+                                supportingText = { if (reasonError) Text("A reason is required to move an overdue activity") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            )
+                        }
+                    }
+                }
                 if (dueTime != null && dueDate == null && !recurring) {
                     Text(
                         "Pick a target date too, otherwise the time is ignored.",
@@ -488,6 +534,26 @@ fun AddTaskDialog(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = KarColors.SlateLight,
                             )
+                        }
+                    }
+                }
+
+                if (base != null && history.isNotEmpty()) {
+                    Spacer(Modifier.height(14.dp))
+                    Surface(color = Color.White, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, KarColors.Border)) {
+                        Column(Modifier.padding(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.History, null, tint = KarColors.SkyDeep, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "History (${history.size})",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = KarColors.Navy,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                TextButton(onClick = { showHistory = !showHistory }) { Text(if (showHistory) "Hide" else "Show") }
+                            }
+                            if (showHistory) HistoryTimeline(history)
                         }
                     }
                 }

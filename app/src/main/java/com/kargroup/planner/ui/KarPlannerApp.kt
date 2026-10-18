@@ -58,7 +58,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.kargroup.planner.ui.components.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -109,14 +109,18 @@ import com.kargroup.planner.ui.components.KarLogo
 import com.kargroup.planner.ui.theme.KarColors
 import com.kargroup.planner.ui.theme.parseHexColor
 import com.kargroup.planner.util.Ist
+import com.kargroup.planner.data.LockMode
+import com.kargroup.planner.data.TaskHistoryEntity
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Share
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Wrapper so the meeting editor can be opened for "new" (null meeting) too. */
 private data class MeetingEditorRequest(val meeting: MeetingMinuteEntity?)
 
-private data class ToggleRequest(val task: TaskEntity, val openSubtasks: Int)
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel()) {
     val tasks by vm.tasks.collectAsStateWithLifecycle()
@@ -134,6 +138,13 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
     val scheduleManual by vm.scheduleManual.collectAsStateWithLifecycle()
     val today by vm.today.collectAsStateWithLifecycle()
     val reminderVersion by vm.reminderVersion.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val appUnlocked by vm.appUnlocked.collectAsStateWithLifecycle()
+    val journalUnlocked by vm.journalUnlocked.collectAsStateWithLifecycle()
+    val journalDate by vm.journalDate.collectAsStateWithLifecycle()
+    val lockActive = settings.pinHash != null && settings.lockMode != LockMode.OFF
+    val appLocked = lockActive && settings.lockMode == LockMode.APP && !appUnlocked
+    val journalLocked = lockActive && settings.lockMode == LockMode.JOURNAL && !journalUnlocked
 
     val context = LocalContext.current
     // Adaptive breakpoints, re-evaluated live on every rotation / window resize:
@@ -176,10 +187,15 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
     var showReminders by remember { mutableStateOf(false) }
     var bannerHidden by remember { mutableStateOf(false) }
     var showDeleteAll by remember { mutableStateOf(false) }
-    var toggleRequest by remember { mutableStateOf<ToggleRequest?>(null) }
+    var completionRequest by remember { mutableStateOf<CompletionRequest?>(null) }
+    var celebration by remember { mutableStateOf<Celebration?>(null) }
+    val askCompletion: (TaskEntity) -> Unit = { t ->
+        completionRequest = CompletionRequest(t, if (t.isRecurring) 0 else index.openDescendantCount(t.id))
+    }
     var deleteTaskRequest by remember { mutableStateOf<TaskEntity?>(null) }
     var deleteProjectRequest by remember { mutableStateOf<ProjectEntity?>(null) }
     var deleteContextRequest by remember { mutableStateOf<ContextTagEntity?>(null) }
+    var rescheduleRequest by remember { mutableStateOf<TaskEntity?>(null) }
 
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
@@ -215,6 +231,16 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
     }
     val startExport = { exportLauncher.launch("KAR-Planner-backup-${Ist.todayStr()}.json") }
     val startImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*")) }
+    var pendingReportPeriod by remember { mutableStateOf(ReportPeriod.MONTH) }
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri != null) vm.exportReportPdf(uri, pendingReportPeriod)
+    }
+    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) vm.exportReportCsv(uri, pendingReportPeriod)
+    }
+    val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) vm.setBackupFolder(uri)
+    }
 
     // --------------------------------------------------------------- add activity
     val openAddActivity: () -> Unit = {
@@ -234,12 +260,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
 
     val taskActions = TaskActions(
         onToggle = { task, checked ->
-            if (checked && !task.isRecurring) {
-                val open = index.openDescendantCount(task.id)
-                if (open > 0) toggleRequest = ToggleRequest(task, open) else vm.setDone(task, true, true)
-            } else {
-                vm.setDone(task, checked, true)
-            }
+            if (checked) askCompletion(task) else vm.setDone(task, false, true)
         },
         onToggleCollapse = { vm.toggleCollapsed(it) },
         onOpen = { taskDialog = TaskDialogRequest(existing = it) },
@@ -247,12 +268,9 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
         onAddSubtask = { taskDialog = TaskDialogRequest(parent = it) },
         onDelete = { deleteTaskRequest = it },
         onStatus = { task, status ->
-            if (status == TaskStatus.COMPLETED && !task.isRecurring && index.openDescendantCount(task.id) > 0) {
-                toggleRequest = ToggleRequest(task, index.openDescendantCount(task.id))
-            } else {
-                vm.setStatus(task, status)
-            }
+            if (status == TaskStatus.COMPLETED) askCompletion(task) else vm.setStatus(task, status)
         },
+        onReschedule = { rescheduleRequest = it },
     )
 
     BackHandler(enabled = drillRootId != null) {
@@ -284,10 +302,13 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                     wide = wide,
                     onMenu = onMenu,
                     onAdd = openAddActivity,
+                    onSearch = { vm.navigate(Screen.Search) },
                 )
             },
             floatingActionButton = {
-                if (!wide && screen != Screen.Meetings && screen != Screen.Projects && screen != Screen.Journal && screen != Screen.People) {
+                if (!wide && screen != Screen.Meetings && screen != Screen.Projects && screen != Screen.Journal && screen != Screen.People &&
+                    screen != Screen.Reports && screen != Screen.Search && screen != Screen.Settings
+                ) {
                     ExtendedFloatingActionButton(
                         onClick = openAddActivity,
                         containerColor = KarColors.SkyDeep,
@@ -323,24 +344,63 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                     )
                     Screen.Schedule -> {
                         // Re-plan the time slots every minute so they always start from "now".
-                        val items = remember(index, scheduleManual, minuteTick) { buildSchedule(index, scheduleManual) }
-                        val autoIds = remember(index) { buildSchedule(index, manual = false).map { it.task.id } }
+                        val plan = remember(index, scheduleManual, minuteTick, settings, meetings) {
+                            buildSchedule(index, scheduleManual, settings, meetings)
+                        }
+                        val autoIds = remember(index, settings, meetings) {
+                            buildSchedule(index, manual = false, settings = settings, meetings = meetings).items.map { it.task.id }.distinct()
+                        }
                         SchedulerScreen(
-                            items = items,
+                            items = plan.items,
+                            blocks = plan.blocks,
+                            settings = settings,
                             manual = scheduleManual,
                             projects = projectMap,
                             today = today,
                             wide = wide,
                             header = header,
+                            quickAdd = { QuickAddBar(persons = persons, projects = projects, onAdd = { vm.addQuick(it) }) },
                             onManualChange = { vm.setScheduleManual(it) },
-                            onMove = { from, to -> vm.moveInSchedule(items.map { it.task.id }, from, to) },
+                            onMove = { from, to -> vm.moveInSchedule(plan.items.map { it.task.id }, from, to) },
                             onResetManual = { vm.resetManualToAuto(autoIds) },
                             onToggle = { task, checked -> taskActions.onToggle(task, checked) },
                             onStatus = { task, status -> taskActions.onStatus(task, status) },
                             onOpen = { taskDialog = TaskDialogRequest(existing = it) },
                             onAddActivity = openAddActivity,
+                            onPin = { task, start -> vm.setPlannedStart(task, start) },
+                            onOpenMeeting = { id -> meetings.firstOrNull { it.id == id }?.let { meetingEditor = MeetingEditorRequest(it) } },
+                            onReschedule = { rescheduleRequest = it },
+                            onToggleHoliday = { vm.toggleHoliday(it) },
                         )
                     }
+                    Screen.Reports -> ReportsScreen(
+                        tasks = tasks,
+                        persons = persons,
+                        projects = projects,
+                        wide = wide,
+                        onExportPdf = { p -> pendingReportPeriod = p; pdfLauncher.launch("KAR-Planner-report-${Ist.todayStr()}.pdf") },
+                        onExportCsv = { p -> pendingReportPeriod = p; csvLauncher.launch("KAR-Planner-report-${Ist.todayStr()}.csv") },
+                        onOpenTask = { taskDialog = TaskDialogRequest(existing = it) },
+                    )
+                    Screen.Search -> SearchScreen(
+                        tasks = tasks,
+                        meetings = meetings,
+                        journal = journal,
+                        projects = projectMap,
+                        journalLocked = journalLocked,
+                        wide = wide,
+                        onOpenTask = { taskDialog = TaskDialogRequest(existing = it) },
+                        onOpenMeeting = { meetingEditor = MeetingEditorRequest(it) },
+                        onOpenJournal = { vm.openJournalOn(it) },
+                    )
+                    Screen.Settings -> SettingsScreen(
+                        settings = settings,
+                        wide = wide,
+                        onUpdate = { vm.updateSettings(it) },
+                        onPickBackupFolder = { folderLauncher.launch(null) },
+                        onBackupNow = { vm.runBackupNow() },
+                        onSetPin = { vm.setPin(it) },
+                    )
                     Screen.People -> PeopleScreen(
                         tasks = tasks,
                         persons = persons,
@@ -352,13 +412,18 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                         header = header,
                         onOpen = { vm.navigate(Screen.Person(it)) },
                     )
-                    Screen.Journal -> JournalScreen(
-                        entries = journal,
-                        today = today,
-                        wide = wide,
-                        onSave = { date, mood, title, content, quiet -> vm.saveJournal(date, mood, title, content, quiet) },
-                        onDelete = { vm.deleteJournal(it) },
-                    )
+                    Screen.Journal -> if (journalLocked) {
+                        LockScreen(settings, "My Journal") { vm.unlockJournal() }
+                    } else {
+                        JournalScreen(
+                            entries = journal,
+                            today = today,
+                            wide = wide,
+                            onSave = { date, mood, title, content, quiet -> vm.saveJournal(date, mood, title, content, quiet) },
+                            onDelete = { vm.deleteJournal(it) },
+                            initialDate = journalDate,
+                        )
+                    }
                     Screen.Meetings -> MeetingsScreen(
                         meetings = meetings,
                         projects = projectMap,
@@ -391,12 +456,44 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
                             header = header,
                             sheetExtras = {
                                 if (s is Screen.Person) {
-                                    androidx.compose.material3.OutlinedButton(
-                                        onClick = { vm.navigate(Screen.People) },
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
-                                        modifier = Modifier.padding(top = 8.dp),
-                                    ) { Text("← All people") }
+                                    val person = persons.firstOrNull { sameAssignee(it.name, s.name) }
+                                    androidx.compose.foundation.layout.FlowRow(
+                                        Modifier.padding(top = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        androidx.compose.material3.OutlinedButton(
+                                            onClick = { vm.navigate(Screen.People) },
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
+                                        ) { Text("← All people") }
+                                        if (s.name != null) {
+                                            androidx.compose.material3.OutlinedButton(
+                                                onClick = { ShareUpdate.whatsApp(context, person?.phone, ShareUpdate.text(s.name, tasks)) },
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
+                                            ) {
+                                                Icon(Icons.Outlined.Share, null, Modifier.size(16.dp))
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("WhatsApp update")
+                                            }
+                                            androidx.compose.material3.OutlinedButton(
+                                                onClick = {
+                                                    ShareUpdate.email(
+                                                        context, person?.email,
+                                                        "OPEN ACTIVITIES – ${s.name.uppercase()} – ${Ist.formatFull(today).uppercase()}",
+                                                        ShareUpdate.text(s.name, tasks).replace("*", ""),
+                                                    )
+                                                },
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
+                                            ) {
+                                                Icon(Icons.Outlined.Email, null, Modifier.size(16.dp))
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("E-mail update")
+                                            }
+                                        }
+                                    }
                                 }
                                 if (s is Screen.Project) {
                                     val project = projectMap[s.id]
@@ -494,15 +591,30 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
 
     // ------------------------------------------------------------------ dialogs
     taskDialog?.let { req ->
+        val historyFlow = remember(req.existing?.id) {
+            req.existing?.let { vm.historyFor(it.id) } ?: kotlinx.coroutines.flow.flowOf(emptyList())
+        }
+        val history by historyFlow.collectAsStateWithLifecycle(initialValue = emptyList<TaskHistoryEntity>())
         AddTaskDialog(
             request = req,
             projects = projects,
             people = persons,
             onAddPerson = { vm.savePerson(it, null) },
             existingSubtasks = req.existing?.let { index.children(it.id).sortedWith(childOrder) } ?: emptyList(),
+            history = history,
             onDismiss = { taskDialog = null },
-            onSave = { task, completed, subs, removed ->
-                vm.saveTask(task, isNew = req.existing == null, wantCompleted = completed, subtasks = subs, removedSubtaskIds = removed)
+            onSave = { task, completed, subs, removed, reason ->
+                // Completing from the pop-up also asks for remarks first.
+                val needsRemarks = completed && !task.done
+                vm.saveTask(
+                    task,
+                    isNew = req.existing == null,
+                    wantCompleted = if (needsRemarks) false else completed,
+                    subtasks = subs,
+                    removedSubtaskIds = removed,
+                    rescheduleReason = reason,
+                )
+                if (needsRemarks) completionRequest = CompletionRequest(task, if (task.isRecurring) 0 else maxOf(index.openDescendantCount(task.id), subs.count { !it.done }))
                 taskDialog = null
             },
         )
@@ -561,6 +673,7 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
             onDismissReminders = { vm.dismiss(it) },
             onOpenTask = { showReminders = false; taskDialog = TaskDialogRequest(existing = it) },
             onClose = { showReminders = false },
+            onReschedule = { rescheduleRequest = it },
         )
     }
 
@@ -573,17 +686,45 @@ fun KarPlannerApp(openRemindersSignal: Int = 0, vm: MainViewModel = viewModel())
         )
     }
 
-    toggleRequest?.let { req ->
-        ConfirmDialog(
-            title = "Complete subtasks too?",
-            message = "\"${req.task.text}\" has ${req.openSubtasks} open subtask(s). Mark them done as well?",
-            confirmLabel = "Complete all",
-            destructive = false,
-            onConfirm = { vm.setDone(req.task, true, true); toggleRequest = null },
-            onDismiss = { toggleRequest = null },
-            secondaryLabel = "Only this one",
-            onSecondary = { vm.setDone(req.task, true, false); toggleRequest = null },
+    completionRequest?.let { req ->
+        CompletionRemarksDialog(
+            request = req,
+            onDismiss = { completionRequest = null },
+            onConfirm = { remarks, includeSubtasks ->
+                vm.completeWithRemarks(req.task, remarks, includeSubtasks)
+                completionRequest = null
+                celebration = newCelebration(req.task, remarks)
+            },
         )
+    }
+
+    celebration?.let { c ->
+        CelebrationOverlay(c) { celebration = null }
+    }
+
+    rescheduleRequest?.let { t ->
+        RescheduleDialog(
+            task = t,
+            onDismiss = { rescheduleRequest = null },
+            onConfirm = { date, time, reason ->
+                vm.reschedule(t, date, time, reason)
+                rescheduleRequest = null
+            },
+        )
+    }
+
+    // Whole-app privacy lock sits above everything else.
+    if (appLocked) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = {},
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+            ),
+        ) {
+            LockScreen(settings, "KAR Planner") { vm.unlockApp() }
+        }
     }
 
     deleteTaskRequest?.let { t ->
@@ -629,6 +770,9 @@ fun screenTitle(screen: Screen, projects: Map<String, ProjectEntity>, contexts: 
     Screen.Journal -> "My Journal"
     is Screen.Project -> projects[screen.id]?.name ?: "Project"
     Screen.People -> "By Person"
+    Screen.Reports -> "Reports"
+    Screen.Search -> "Search"
+    Screen.Settings -> "Settings"
     is Screen.Person -> screen.name ?: "Unassigned"
 }
 

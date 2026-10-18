@@ -74,6 +74,10 @@ data class TaskEntity(
     @ColumnInfo(name = "status") val status: String? = null,
     /** Person the activity is assigned to (optional). */
     @ColumnInfo(name = "assignee") val assignee: String? = null,
+    /** Remarks entered when the activity was completed (required on completion). */
+    @ColumnInfo(name = "completion_remarks") val completionRemarks: String? = null,
+    /** Start time fixed by the user in the Scheduler (epoch millis), or null to let the scheduler decide. */
+    @ColumnInfo(name = "planned_start") val plannedStart: Long? = null,
     @ColumnInfo(name = "is_recurring") val isRecurring: Boolean = false,
     @ColumnInfo(name = "recurrence_frequency") val recurrenceFrequency: String? = null,
     @ColumnInfo(name = "recurrence_interval") val recurrenceInterval: Int = 1,
@@ -136,6 +140,26 @@ data class MeetingMinuteEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
 )
 
+/** One line in an activity's history (created, rescheduled, completed ...). */
+@Entity(tableName = "task_history", indices = [Index("task_id")])
+data class TaskHistoryEntity(
+    @PrimaryKey val id: String = newId(),
+    @ColumnInfo(name = "task_id") val taskId: String,
+    @ColumnInfo(name = "at") val at: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "kind") val kind: String,
+    @ColumnInfo(name = "detail") val detail: String? = null,
+)
+
+object HistoryKind {
+    const val CREATED = "created"
+    const val UPDATED = "updated"
+    const val ASSIGNED = "assigned"
+    const val RESCHEDULED = "rescheduled"
+    const val STATUS = "status"
+    const val COMPLETED = "completed"
+    const val REOPENED = "reopened"
+}
+
 /** A team member activities can be assigned to. Tasks store the person's name. */
 @Entity(tableName = "persons")
 data class PersonEntity(
@@ -169,4 +193,5 @@ data class BackupSnapshot(
     val meetings: List<MeetingMinuteEntity>,
     val journal: List<JournalEntry> = emptyList(),
     val persons: List<PersonEntity> = emptyList(),
+    val history: List<TaskHistoryEntity> = emptyList(),
 )

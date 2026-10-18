@@ -2,6 +2,7 @@ package com.kargroup.planner.data
 
 import android.content.SharedPreferences
 import androidx.room.withTransaction
+import com.kargroup.planner.util.Ist
 import com.kargroup.planner.util.Recurrence
 import kotlinx.coroutines.flow.Flow
 
@@ -13,6 +14,16 @@ class KarRepository(private val db: KarDatabase) {
     private val meetingDao = db.meetingDao()
     private val journalDao = db.journalDao()
     private val personDao = db.personDao()
+    private val historyDao = db.historyDao()
+
+    fun historyFor(taskId: String): Flow<List<TaskHistoryEntity>> = historyDao.observeForTask(taskId)
+
+    private suspend fun log(taskId: String, kind: String, detail: String?) {
+        historyDao.upsert(TaskHistoryEntity(taskId = taskId, kind = kind, detail = detail))
+    }
+
+    private fun targetText(date: String?, time: String?): String =
+        if (date == null) "no date" else Ist.formatFull(date) + (time?.let { " $it" } ?: "")
 
     val tasks: Flow<List<TaskEntity>> = taskDao.observeAll()
     val projects: Flow<List<ProjectEntity>> = projectDao.observeAll()
@@ -89,12 +100,69 @@ class KarRepository(private val db: KarDatabase) {
 
     // ------------------------------------------------------------------ tasks
 
-    suspend fun saveTask(task: TaskEntity) = taskDao.upsert(task)
+    /** Saves an activity and records what changed in its history. */
+    suspend fun saveTask(task: TaskEntity, rescheduleReason: String? = null) {
+        val old = taskDao.getById(task.id)
+        taskDao.upsert(task)
+        if (old == null) {
+            log(task.id, HistoryKind.CREATED, buildString {
+                append("Created")
+                task.assignee?.let { append(" · assigned to $it") }
+                if (task.dueDate != null) append(" · target ${targetText(task.dueDate, task.dueTime)}")
+            })
+            return
+        }
+        if ((old.assignee ?: "") != (task.assignee ?: "")) {
+            log(task.id, HistoryKind.ASSIGNED, "Assigned: ${old.assignee ?: "Unassigned"} → ${task.assignee ?: "Unassigned"}")
+        }
+        if (old.dueDate != task.dueDate || old.dueTime != task.dueTime) {
+            log(task.id, HistoryKind.RESCHEDULED, buildString {
+                append("Target: ${targetText(old.dueDate, old.dueTime)} → ${targetText(task.dueDate, task.dueTime)}")
+                if (!rescheduleReason.isNullOrBlank()) append(" · Reason: ${rescheduleReason.trim()}")
+            })
+        }
+        if ((old.status ?: TaskStatus.NOT_STARTED) != (task.status ?: TaskStatus.NOT_STARTED) && !task.done) {
+            log(task.id, HistoryKind.STATUS, "Status: ${TaskStatus.label(old.status ?: TaskStatus.NOT_STARTED)} → ${TaskStatus.label(task.status ?: TaskStatus.NOT_STARTED)}")
+        }
+        val changed = buildList {
+            if (old.text != task.text) add("title")
+            if (old.priority != task.priority) add("priority")
+            if (old.estimatedMinutes != task.estimatedMinutes) add("estimate")
+            if (old.notes != task.notes) add("notes")
+            if (old.projectId != task.projectId) add("project")
+            if (old.isRecurring != task.isRecurring || old.recurrenceFrequency != task.recurrenceFrequency) add("recurrence")
+        }
+        if (changed.isNotEmpty()) log(task.id, HistoryKind.UPDATED, "Updated " + changed.joinToString(", "))
+    }
+
+    /** Moves an (overdue) activity to a new target with a compulsory reason. */
+    suspend fun reschedule(taskId: String, newDate: String, newTime: String?, reason: String) {
+        val t = taskDao.getById(taskId) ?: return
+        saveTask(t.copy(dueDate = newDate, dueTime = newTime, plannedStart = null), reason)
+    }
+
+    /** Fixes (or clears) an activity's start time in the Scheduler. */
+    suspend fun setPlannedStart(taskId: String, start: Long?) {
+        taskDao.setPlannedStart(taskId, start)
+        log(taskId, HistoryKind.UPDATED, if (start == null) "Scheduler time released" else "Scheduled for ${Ist.formatStamp(start)}")
+    }
 
     suspend fun setCollapsed(id: String, collapsed: Boolean) = taskDao.setCollapsed(id, collapsed)
 
+    /** Completes an activity with the remarks the user entered. */
+    suspend fun completeWithRemarks(taskId: String, remarks: String, includeSubtasks: Boolean) {
+        taskDao.setRemarks(taskId, remarks.trim())
+        setDone(taskId, true, includeSubtasks)
+    }
+
     /** Sets Not Started / Initiated on an activity (Completed goes through [setDone]). */
-    suspend fun setStatus(id: String, status: String) = taskDao.setStatus(id, status)
+    suspend fun setStatus(id: String, status: String) {
+        val old = taskDao.getById(id)
+        taskDao.setStatus(id, status)
+        if (old != null && (old.status ?: TaskStatus.NOT_STARTED) != status) {
+            log(id, HistoryKind.STATUS, "Status: ${TaskStatus.label(old.effectiveStatus)} → ${TaskStatus.label(status)}")
+        }
+    }
 
     /** Saves the scheduler's manual order: position i gets order (i + 1) * 10. */
     suspend fun saveManualOrder(orderedIds: List<String>) {
@@ -115,7 +183,11 @@ class KarRepository(private val db: KarDatabase) {
         if (!done) {
             taskDao.upsert(task.copy(done = false, completedAt = null))
             syncActionItem(task, false)
+            if (task.done) log(task.id, HistoryKind.REOPENED, "Reopened")
             return
+        }
+        if (!task.done) {
+            log(task.id, HistoryKind.COMPLETED, "Completed" + (task.completionRemarks?.let { " · Remarks: $it" } ?: ""))
         }
 
         val descendants = descendantsOf(all, taskId)
@@ -133,6 +205,7 @@ class KarRepository(private val db: KarDatabase) {
                 createdAt = now,
                 dueDate = Recurrence.nextDueDate(task).toString(),
                 status = TaskStatus.NOT_STARTED,
+                completionRemarks = null,
             )
             val idMap = HashMap<String, String>()
             idMap[task.id] = next.id
@@ -149,10 +222,12 @@ class KarRepository(private val db: KarDatabase) {
                         completedAt = null,
                         createdAt = now,
                         meetingActionItemId = null,
+                        completionRemarks = null,
                     )
                 )
             }
             taskDao.upsertAll(clones)
+            log(next.id, HistoryKind.CREATED, "Next recurrence created · target ${targetText(next.dueDate, next.dueTime)}")
             return
         }
 
@@ -182,7 +257,10 @@ class KarRepository(private val db: KarDatabase) {
         val all = taskDao.getAll()
         val root = all.firstOrNull { it.id == taskId } ?: return
         val doomed = descendantsOf(all, taskId) + root
-        doomed.map { it.id }.chunked(500).forEach { taskDao.deleteByIds(it) }
+        doomed.map { it.id }.chunked(500).forEach {
+            taskDao.deleteByIds(it)
+            historyDao.deleteForTasks(it)
+        }
 
         // Remove matching action items from their meetings so they are not re-created.
         doomed.filter { it.meetingId != null && it.meetingActionItemId != null }
@@ -238,7 +316,7 @@ class KarRepository(private val db: KarDatabase) {
             val due = item.dueDate?.takeIf { it.isNotBlank() }
             val existing = byItem[item.id]
             if (existing == null) {
-                taskDao.upsert(
+                saveTask(
                     TaskEntity(
                         text = title,
                         assignee = person,
@@ -288,6 +366,7 @@ class KarRepository(private val db: KarDatabase) {
         meetings = meetingDao.getAll(),
         journal = journalDao.getAll(),
         persons = personDao.getAll(),
+        history = historyDao.getAll(),
     )
 
     /** Merges a backup into the database (records with the same id are replaced). */
@@ -300,6 +379,7 @@ class KarRepository(private val db: KarDatabase) {
             contextDao.upsertAll(snapshot.contexts)
             meetingDao.upsertAll(snapshot.meetings)
             snapshot.tasks.chunked(300).forEach { taskDao.upsertAll(it) }
+            snapshot.history.chunked(300).forEach { historyDao.upsertAll(it) }
             // One entry per date: an imported entry replaces the one already on that date.
             snapshot.journal.forEach { e ->
                 val existing = journalDao.getByDate(e.date)
@@ -325,6 +405,7 @@ class KarRepository(private val db: KarDatabase) {
             meetingDao.deleteAll()
             journalDao.deleteAll()
             personDao.deleteAll()
+            historyDao.deleteAll()
         }
     }
 

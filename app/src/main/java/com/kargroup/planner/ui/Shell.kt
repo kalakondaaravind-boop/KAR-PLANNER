@@ -42,12 +42,15 @@ import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.ViewList
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.kargroup.planner.ui.components.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,7 +88,7 @@ import kotlinx.coroutines.delay
 // =============================================================================
 
 @Composable
-internal fun TopBar(title: String, wide: Boolean, onMenu: (() -> Unit)?, onAdd: () -> Unit) {
+internal fun TopBar(title: String, wide: Boolean, onMenu: (() -> Unit)?, onAdd: () -> Unit, onSearch: () -> Unit = {}) {
     Column(Modifier.depthShadow(4.dp, RectangleShape).background(Color.White)) {
         Row(
             Modifier
@@ -115,7 +118,8 @@ internal fun TopBar(title: String, wide: Boolean, onMenu: (() -> Unit)?, onAdd: 
                     maxLines = 1,
                 )
             }
-            Spacer(Modifier.width(8.dp))
+            IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, "Search", tint = KarColors.Navy) }
+            Spacer(Modifier.width(4.dp))
             IstClockBadge(showDate = true, compact = !wide)
             if (wide) {
                 Spacer(Modifier.width(14.dp))
@@ -292,11 +296,14 @@ internal fun Sidebar(
         NavItem("By Person", Icons.Outlined.People, screen == Screen.People || screen is Screen.Person, null) { onNavigate(Screen.People) }
         NavItem("Projects", Icons.Outlined.Folder, screen == Screen.Projects || screen is Screen.Project, null) { onNavigate(Screen.Projects) }
         NavItem("Minutes of Meeting", Icons.Outlined.Groups, screen == Screen.Meetings, null) { onNavigate(Screen.Meetings) }
+        NavItem("Reports", Icons.Outlined.Insights, screen == Screen.Reports, null) { onNavigate(Screen.Reports) }
 
         NavLabel("Personal")
         NavItem("My Journal", Icons.Outlined.Book, screen == Screen.Journal, null) { onNavigate(Screen.Journal) }
 
         NavLabel("Utilities")
+        NavItem("Search", Icons.Outlined.Search, screen == Screen.Search, null) { onNavigate(Screen.Search) }
+        NavItem("Settings", Icons.Outlined.Settings, screen == Screen.Settings, null) { onNavigate(Screen.Settings) }
         NavItem("Reminders", Icons.Outlined.NotificationsActive, false, alertCount.takeIf { it > 0 }, KarColors.Amber, onClick = onReminders)
         NavItem("Export Backup", Icons.Outlined.Download, false, null, onClick = onExport)
         NavItem("Import Backup", Icons.Outlined.Upload, false, null, onClick = onImport)
@@ -467,8 +474,10 @@ internal fun NavRail(
         RailItem("People", Icons.Outlined.People, screen == Screen.People || screen is Screen.Person) { onNavigate(Screen.People) }
         RailItem("Projects", Icons.Outlined.Folder, screen == Screen.Projects || screen is Screen.Project) { onNavigate(Screen.Projects) }
         RailItem("MoM", Icons.Outlined.Groups, screen == Screen.Meetings) { onNavigate(Screen.Meetings) }
+        RailItem("Reports", Icons.Outlined.Insights, screen == Screen.Reports) { onNavigate(Screen.Reports) }
         RailItem("Journal", Icons.Outlined.Book, screen == Screen.Journal) { onNavigate(Screen.Journal) }
         RailDivider()
+        RailItem("Settings", Icons.Outlined.Settings, screen == Screen.Settings) { onNavigate(Screen.Settings) }
         RailItem(if (alertCount > 0) "Alerts ($alertCount)" else "Alerts", Icons.Outlined.NotificationsActive, false, onClick = onReminders)
         RailItem("Export", Icons.Outlined.Download, false, onClick = onExport)
         RailItem("Import", Icons.Outlined.Upload, false, onClick = onImport)

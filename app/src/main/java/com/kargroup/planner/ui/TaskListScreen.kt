@@ -2,6 +2,7 @@ package com.kargroup.planner.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,7 +48,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.kargroup.planner.ui.components.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -92,6 +93,7 @@ class TaskActions(
     val onAddSubtask: (TaskEntity) -> Unit,
     val onDelete: (TaskEntity) -> Unit,
     val onStatus: (TaskEntity, String) -> Unit,
+    val onReschedule: (TaskEntity) -> Unit = {},
 )
 
 fun statusColor(s: String): Color = when (s) {
@@ -445,6 +447,16 @@ fun TaskRow(
                 color = if (task.done) KarColors.SlateLight else KarColors.Ink,
                 textDecoration = if (task.done) TextDecoration.LineThrough else null,
             )
+            val remarks = task.completionRemarks
+            if (task.done && !remarks.isNullOrBlank()) {
+                Text(
+                    "💬 $remarks",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = KarColors.Green,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             val firstNoteLine = task.notes?.lineSequence()?.firstOrNull { it.isNotBlank() }
             if (firstNoteLine != null) {
                 Text(
@@ -470,7 +482,13 @@ fun TaskRow(
                         due == today -> KarColors.Amber
                         else -> KarColors.Navy2
                     }
-                    MetaPill(if (overdue) "Overdue · ${dueLabel(task)}" else dueLabel(task), color, Icons.Outlined.Event)
+                    if (overdue) {
+                        androidx.compose.foundation.layout.Box(
+                            Modifier.clip(RoundedCornerShape(50)).clickable { actions.onReschedule(task) }
+                        ) { MetaPill("Overdue · ${dueLabel(task)} · reschedule", color, Icons.Outlined.Event) }
+                    } else {
+                        MetaPill(dueLabel(task), color, Icons.Outlined.Event)
+                    }
                 }
                 EstimatePill(task)
                 if (task.isRecurring) MetaPill(Recurrence.describe(task), KarColors.Navy2, Icons.Outlined.Repeat)

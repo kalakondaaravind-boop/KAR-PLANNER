@@ -27,9 +27,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import com.kargroup.planner.ui.components.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.kargroup.planner.ui.components.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -118,6 +118,7 @@ fun RemindersDialog(
     onDismissReminders: (List<String>) -> Unit,
     onOpenTask: (TaskEntity) -> Unit,
     onClose: () -> Unit,
+    onReschedule: (TaskEntity) -> Unit = {},
 ) {
     AlertDialog(
         onDismissRequest = onClose,
@@ -158,6 +159,9 @@ fun RemindersDialog(
                                         Icon(Icons.Outlined.Snooze, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Snooze 1 Hour")
                                     }
                                     TextButton(onClick = { onDismissReminders(listOf(t.id)) }) { Text("Dismiss", color = KarColors.Slate) }
+                                    if (!t.done && t.dueDate != null && t.dueDate < today) {
+                                        TextButton(onClick = { onReschedule(t) }) { Text("Reschedule", color = KarColors.Red) }
+                                    }
                                 }
                             }
                         }

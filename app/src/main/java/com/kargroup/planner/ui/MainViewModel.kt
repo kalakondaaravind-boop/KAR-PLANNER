@@ -15,6 +15,12 @@ import com.kargroup.planner.data.JournalEntry
 import com.kargroup.planner.data.PersonEntity
 import com.kargroup.planner.data.TaskStatus
 import com.kargroup.planner.reminders.ReminderNotifications
+import com.kargroup.planner.backup.AutoBackup
+import com.kargroup.planner.data.LockMode
+import com.kargroup.planner.data.PlannerSettings
+import com.kargroup.planner.data.SettingsStore
+import com.kargroup.planner.data.TaskHistoryEntity
+import android.content.Intent
 import com.kargroup.planner.util.Ist
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -42,6 +48,9 @@ sealed interface Screen {
     data object Meetings : Screen
     data object Journal : Screen
     data object People : Screen
+    data object Reports : Screen
+    data object Search : Screen
+    data object Settings : Screen
     /** Review page for one person; [name] is null for "Unassigned". */
     data class Person(val name: String?) : Screen
     data class Project(val id: String) : Screen
@@ -68,6 +77,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val screen = MutableStateFlow<Screen>(Screen.Schedule)
 
+    /** Working hours, holidays, reminders, backup and lock preferences. */
+    val settings: StateFlow<PlannerSettings> = karApp.settings.state
+
+    /** Privacy lock state for this app session. */
+    val appUnlocked = MutableStateFlow(false)
+    val journalUnlocked = MutableStateFlow(false)
+    private var backgroundSince: Long? = null
+
+    /** Date the journal should open on (set when coming from Search). */
+    val journalDate = MutableStateFlow<String?>(null)
+
     /** Scheduler sort mode: false = automatic, true = manual. Remembered between launches. */
     val scheduleManual = MutableStateFlow(karApp.appPrefs.getBoolean(KEY_SCHEDULE_MANUAL, false))
     val drillRootId = MutableStateFlow<String?>(null)
@@ -93,7 +113,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun toast(msg: String) {
-        _messages.trySend(msg)
+        _messages.trySend(msg.uppercase())
     }
 
     // ------------------------------------------------------------ navigation
@@ -101,6 +121,72 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun navigate(target: Screen) {
         screen.value = target
         drillRootId.value = null
+        if (target != Screen.Journal) journalDate.value = null
+    }
+
+    fun openJournalOn(date: String) {
+        journalDate.value = date
+        screen.value = Screen.Journal
+        drillRootId.value = null
+    }
+
+    // ---------------------------------------------------------------- settings
+
+    fun updateSettings(transform: (PlannerSettings) -> PlannerSettings) {
+        val before = settings.value.lockMode
+        karApp.settings.update(transform)
+        // Turning the lock on from Settings shouldn't lock you out of the screen you're on.
+        if (settings.value.lockMode != before) {
+            appUnlocked.value = true
+            journalUnlocked.value = true
+        }
+    }
+
+    fun toggleHoliday(day: String) {
+        var added = false
+        karApp.settings.update { s ->
+            added = day !in s.holidays
+            s.copy(holidays = if (added) s.holidays + day else s.holidays - day)
+        }
+        toast(if (added) "${Ist.friendly(day)} marked as holiday · activities moved to the next working day" else "${Ist.friendly(day)} is a working day again")
+    }
+
+    fun setPin(pin: String) {
+        karApp.settings.update { it.copy(pinHash = SettingsStore.hashPin(pin)) }
+        appUnlocked.value = true
+        journalUnlocked.value = true
+        toast("PIN saved")
+    }
+
+    fun setBackupFolder(uri: Uri) {
+        val resolver = getApplication<Application>().contentResolver
+        runCatching {
+            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+        karApp.settings.update { it.copy(backupFolder = uri.toString(), autoBackup = true) }
+        toast("Backup folder saved · daily backup is on")
+        runBackupNow()
+    }
+
+    fun runBackupNow() = viewModelScope.launch {
+        val r = withContext(Dispatchers.IO) { runCatching { AutoBackup.runNow(getApplication<Application>()) } }
+        r.onSuccess { toast("Backup saved: $it") }.onFailure { toast("Backup failed: ${it.message}") }
+    }
+
+    // -------------------------------------------------------------------- lock
+
+    fun unlockApp() { appUnlocked.value = true }
+    fun unlockJournal() { journalUnlocked.value = true }
+
+    /** Called when the app goes to the background / comes back. Re-locks after 60 s away. */
+    fun onBackground() { backgroundSince = System.currentTimeMillis() }
+    fun onForeground() {
+        val since = backgroundSince ?: return
+        backgroundSince = null
+        if (System.currentTimeMillis() - since > 60_000 && settings.value.lockMode != LockMode.OFF) {
+            appUnlocked.value = false
+            journalUnlocked.value = false
+        }
     }
 
     fun drillInto(taskId: String?) {
@@ -171,8 +257,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         wantCompleted: Boolean = task.done,
         subtasks: List<SubtaskDraft> = emptyList(),
         removedSubtaskIds: List<String> = emptyList(),
+        rescheduleReason: String? = null,
     ) = viewModelScope.launch {
-        repo.saveTask(task)
+        repo.saveTask(task, rescheduleReason)
         // Subtasks edited inside the pop-up: update, create or remove.
         val current = tasks.value.associateBy { it.id }
         val base = System.currentTimeMillis()
@@ -201,6 +288,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             (if (isNew) "Activity created" else "Activity updated") +
                 if (n > 0) " · $n subtask${if (n == 1) "" else "s"} added" else ""
         )
+    }
+
+    /** Activity typed into the Quick-add bar. */
+    fun addQuick(task: TaskEntity) = viewModelScope.launch {
+        repo.saveTask(task)
+        toast("Added \"${task.text}\"" + (task.dueDate?.let { " · ${Ist.friendly(it)}" } ?: ""))
+    }
+
+    /** New target for an overdue activity; the reason is kept in its history. */
+    fun reschedule(task: TaskEntity, date: String, time: String?, reason: String) = viewModelScope.launch {
+        repo.reschedule(task.id, date, time, reason)
+        toast("Rescheduled to ${Ist.friendly(date)}")
+    }
+
+    /** Fixes (or releases with null) the start time of an activity in the Scheduler. */
+    fun setPlannedStart(task: TaskEntity, start: Long?) = viewModelScope.launch {
+        repo.setPlannedStart(task.id, start)
+        toast(if (start == null) "Start time released · scheduled automatically" else "Start time fixed at ${formatMillisTime(start)}")
+    }
+
+    fun historyFor(taskId: String): Flow<List<TaskHistoryEntity>> = repo.historyFor(taskId)
+
+    // ----------------------------------------------------------------- reports
+
+    fun exportReportPdf(uri: Uri, period: ReportPeriod) = viewModelScope.launch {
+        val r = withContext(Dispatchers.IO) {
+            runCatching {
+                val report = buildReport(tasks.value, persons.value, projects.value, period)
+                ReportExport.pdf(getApplication<Application>(), uri, report)
+            }
+        }
+        r.onSuccess { toast("PDF report saved") }.onFailure { toast("PDF export failed: ${it.message}") }
+    }
+
+    fun exportReportCsv(uri: Uri, period: ReportPeriod) = viewModelScope.launch {
+        val r = withContext(Dispatchers.IO) {
+            runCatching {
+                val report = buildReport(tasks.value, persons.value, projects.value, period)
+                val csv = ReportExport.csv(report, tasks.value, projects.value)
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                    ?: error("Could not open the selected file")
+            }
+        }
+        r.onSuccess { toast("Excel (CSV) report saved") }.onFailure { toast("Excel export failed: ${it.message}") }
+    }
+
+    /** Completes an activity with its (compulsory) remarks. */
+    fun completeWithRemarks(task: TaskEntity, remarks: String, includeSubtasks: Boolean) = viewModelScope.launch {
+        repo.completeWithRemarks(task.id, remarks, includeSubtasks)
+        if (task.isRecurring) toast("Next \"${task.text}\" scheduled")
     }
 
     /** Quick status change from a list row. */
@@ -301,7 +438,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         result.onSuccess {
-            toast("Imported ${it.tasks.size} activities, ${it.projects.size} projects, ${it.contexts.size} contexts, ${it.meetings.size} meetings")
+            toast(
+                "Imported ${it.tasks.size} activities, ${it.projects.size} projects, ${it.meetings.size} meetings" +
+                    (if (it.persons.isNotEmpty()) ", ${it.persons.size} people" else "") +
+                    (if (it.journal.isNotEmpty()) ", ${it.journal.size} journal entries" else "")
+            )
         }.onFailure { toast("Import failed: ${it.message}") }
     }
 
