@@ -388,10 +388,10 @@ fun SchedulerScreen(
                             color = if (work) KarColors.Navy else KarColors.SlateLight,
                         )
                         if (working && hour == settings.workStart / 60) {
-                            Text("Start ${minutesToHHmm(settings.workStart)}", fontSize = 9.sp, color = KarColors.Green)
+                            Text("Start ${minutesToHHmm(settings.workStart)}", fontSize = 11.sp, color = KarColors.Green)
                         }
                         if (working && hour == (if (settings.workEnd % 60 == 0) settings.workEnd / 60 else settings.workEnd / 60)) {
-                            Text("End ${minutesToHHmm(settings.workEnd)}", fontSize = 9.sp, color = KarColors.Red)
+                            Text("End ${minutesToHHmm(settings.workEnd)}", fontSize = 11.sp, color = KarColors.Red)
                         }
                     }
                     Box(
@@ -406,7 +406,7 @@ fun SchedulerScreen(
                                 Box(Modifier.weight(1f).height(1.5.dp).background(KarColors.Red))
                                 Text(
                                     " Now ${"%02d:%02d".format(nowZ.hour, nowZ.minute)}",
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     color = KarColors.Red,
                                     fontWeight = FontWeight.Bold,
                                 )
@@ -668,7 +668,7 @@ private fun ScheduleRow(
             Text(formatMillisTime24(item.startMillis), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = KarColors.Navy, maxLines = 1)
             Text(
                 "→ " + formatMillisTime24(item.endMillis),
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 color = KarColors.Slate,
                 maxLines = 1,
             )

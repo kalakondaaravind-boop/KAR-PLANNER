@@ -112,7 +112,7 @@ internal fun TopBar(title: String, wide: Boolean, onMenu: (() -> Unit)?, onAdd: 
                 Text(
                     "KAR GROUP · PLANNER",
                     color = KarColors.Slate,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     letterSpacing = 1.6.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -156,7 +156,7 @@ fun IstClockBadge(showDate: Boolean, compact: Boolean) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(6.dp).clip(CircleShape).background(KarColors.Green))
                 Spacer(Modifier.width(5.dp))
-                Text("IST ", color = KarColors.SkyDeep, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("IST ", color = KarColors.SkyDeep, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text(
                     now.format(Ist.clockFormat),
                     color = KarColors.Navy,
@@ -277,7 +277,7 @@ internal fun Sidebar(
         Row(Modifier.padding(start = 10.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(width = 16.dp, height = 2.dp).background(KarColors.SkyMid))
             Spacer(Modifier.width(8.dp))
-            Text("PLANNER", color = KarColors.SkyDeep, fontWeight = FontWeight.Bold, letterSpacing = 4.sp, fontSize = 10.sp)
+            Text("PLANNER", color = KarColors.SkyDeep, fontWeight = FontWeight.Bold, letterSpacing = 4.sp, fontSize = 11.sp)
         }
         Spacer(Modifier.height(20.dp))
         GoldButton("New Activity", onNewActivity, Modifier.fillMaxWidth(), icon = Icons.Outlined.Add, height = 46.dp)

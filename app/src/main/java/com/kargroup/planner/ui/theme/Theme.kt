@@ -101,8 +101,8 @@ private val KarTypography = Typography(
     labelSmall = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.3.sp),
 )
 
-/** All text is drawn at 92% of the system font size for a slightly more compact, professional look. */
-private const val KAR_TEXT_SCALE = 0.92f
+/** All text is drawn at 75% of the system font size for a slightly more compact, professional look. */
+private const val KAR_TEXT_SCALE = 0.75f
 
 @Composable
 fun KarTheme(content: @Composable () -> Unit) {

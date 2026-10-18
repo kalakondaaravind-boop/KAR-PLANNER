@@ -461,7 +461,7 @@ private fun CompletionBars(data: List<Pair<String, Int>>) {
                 Text(
                     if (i % step == 0 || i == data.lastIndex) label else "",
                     modifier = Modifier.weight(1f),
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
                     color = KarColors.SlateLight,
                     maxLines = 1,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
