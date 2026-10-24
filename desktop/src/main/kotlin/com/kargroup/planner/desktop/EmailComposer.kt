@@ -112,7 +112,7 @@ object EmailComposer {
     private fun page(body: String, es: EmailSettings, signed: Boolean = true): String {
         val sign = if (signed && !es.useOutlookSignature) typedSignature(es) else ""
         return "<html><head><meta charset=\"utf-8\"></head><body style=\"$FONT;font-size:11pt;color:$INK\">" +
-            BODY_START + "<div style=\"$FONT;font-size:11pt;color:$INK\">" + body + (if (body.contains("bgcolor=")) legend() else "") + "</div>" + BODY_END +
+            BODY_START + "<div style=\"$FONT;font-size:11pt;color:$INK\">" + body + legend(body) + "</div>" + BODY_END +
             sign + "</body></html>"
     }
 
@@ -159,13 +159,21 @@ object EmailComposer {
     }
 
     /** Colour key shown under the tables. */
-    private fun legend(): String {
+    private fun legend(body: String): String {
         fun key(bg: String, fg: String, label: String) =
             "<span style=\"background:$bg;color:$fg;padding:1px 6px;border:1px solid $GRID\">$label</span>"
-        return "<p style=\"margin:10px 0 0 0;$FONT;font-size:8pt;color:$GREY\">Colour key: " +
-            listOf(key(RED_BG, RED_FG, "Overdue / Very High"), key(AMB_BG, AMB_FG, "Due today / Medium"), key(ORG_BG, ORG_FG, "High"),
-                key(BLU_BG, BLU_FG, "Initiated"), key(GRN_BG, GRN_FG, "Completed")).joinToString(" &nbsp;") + "</p>"
+        // only the colours actually used in this e-mail
+        val keys = listOfNotNull(
+            key(RED_BG, RED_FG, "Overdue / Very High").takeIf { body.contains("bgcolor=\"$RED_BG\"") },
+            key(AMB_BG, AMB_FG, "Due today / Medium").takeIf { body.contains("bgcolor=\"$AMB_BG\"") },
+            key(ORG_BG, ORG_FG, "High").takeIf { body.contains("bgcolor=\"$ORG_BG\"") },
+            key(BLU_BG, BLU_FG, "Initiated / Open").takeIf { body.contains("bgcolor=\"$BLU_BG\"") },
+            key(GRN_BG, GRN_FG, "Completed").takeIf { body.contains("bgcolor=\"$GRN_BG\"") },
+        )
+        if (keys.size < 2) return ""
+        return "<p style=\"margin:10px 0 0 0;$FONT;font-size:8pt;color:$GREY\">Colour key: " + keys.joinToString(" &nbsp;") + "</p>"
     }
+
 
     private fun table(headers: List<String>, rows: List<List<String>>, widths: List<String>? = null): String {
         val cell = "$FONT;font-size:10pt;padding:4px 8px;border:1px solid $GRID"
