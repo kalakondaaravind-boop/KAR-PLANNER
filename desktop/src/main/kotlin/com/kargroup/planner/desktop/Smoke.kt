@@ -47,9 +47,9 @@ fun main(args: Array<String>) {
         val aurora = ProjectEntity(name = "PROJECT AURORA", color = "#0EA5E9")
         repo.saveProject(aurora)
         listOf(
-            TaskEntity(text = "SUBMIT Q3 COMPLIANCE REPORT TO AUDIT COMMITTEE", assignee = "PRIYA SHARMA", priority = Priority.VERY_HIGH, dueDate = d(-3), dueTime = "11:00", estimatedMinutes = 60, status = TaskStatus.INITIATED),
+            TaskEntity(text = "SUBMIT Q3 COMPLIANCE REPORT TO AUDIT COMMITTEE", assignee = "PRIYA SHARMA", priority = Priority.VERY_HIGH, dueDate = d(-3), dueTime = "11:00", estimatedMinutes = 60, status = TaskStatus.INITIATED, statusNote = "DRAFT SHARED WITH CFO; AWAITING SIGN-OFF", notes = "ATTACH SIGNED RECONCILIATION AND VARIANCE MEMO"),
             TaskEntity(text = "SHARE REVISED BUDGET WITH FINANCE", assignee = "PRIYA SHARMA", priority = Priority.HIGH, dueDate = d(0), estimatedMinutes = 20),
-            TaskEntity(text = "VENDOR CONTRACT REDLINES", assignee = "RAHUL MEHTA", priority = Priority.HIGH, dueDate = d(0), dueTime = "17:00", estimatedMinutes = 30, projectId = aurora.id),
+            TaskEntity(text = "VENDOR CONTRACT REDLINES", assignee = "RAHUL MEHTA", priority = Priority.HIGH, dueDate = d(0), dueTime = "17:00", estimatedMinutes = 30, projectId = aurora.id, statusNote = "LEGAL COMMENTS RECEIVED"),
             TaskEntity(text = "APPROVE TRAVEL REIMBURSEMENT", priority = Priority.MEDIUM, dueDate = d(0), estimatedMinutes = 5),
             TaskEntity(text = "UPDATE TEAM CAPACITY TRACKER", assignee = "VIKRAM IYER", dueDate = d(1), estimatedMinutes = 45),
             TaskEntity(text = "DRAFT Q4 HIRING PLAN", assignee = "ANITA RAO", priority = Priority.MEDIUM, dueDate = d(1), estimatedMinutes = 90),

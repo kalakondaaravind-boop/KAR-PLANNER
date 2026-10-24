@@ -493,14 +493,14 @@ object ReportCsv {
         sb.append("ON TIME %,${report.onTimePct ?: ""}\nOPEN NOW,${report.openNow}\nOVERDUE NOW,${report.overdueNow}\n\n")
         sb.append("BY PERSON\nPERSON,COMPLETED,ON TIME,LATE,OPEN,OVERDUE\n")
         report.people.forEach { sb.append("${csvCell(it.name)},${it.completed},${it.onTime},${it.late},${it.open},${it.overdue}\n") }
-        sb.append("\nACTIVITIES\nTITLE,PROJECT,ASSIGNED TO,PRIORITY,STATUS,TARGET DATE,TARGET TIME,ESTIMATE (MIN),COMPLETED AT,REMARKS\n")
+        sb.append("\nACTIVITIES\nTITLE,PROJECT,ASSIGNED TO,PRIORITY,STATUS,TARGET DATE,TARGET TIME,ESTIMATE (MIN),CURRENT STATUS,NOTES,COMPLETED AT,REMARKS\n")
         val list = report.completedList + tasks.filter { !it.done }
         list.forEach { t ->
             sb.append(
                 listOf(
                     t.text, t.projectId?.let { pName[it] } ?: "", t.assignee ?: "", t.priority ?: "standard",
                     TaskStatus.label(t.effectiveStatusLabel()), t.dueDate ?: "", t.dueTime ?: "",
-                    t.estimatedMinutes?.toString() ?: "", t.completedAt?.let { Ist.formatStamp(it) } ?: "",
+                    t.estimatedMinutes?.toString() ?: "", t.statusNote ?: "", t.notes ?: "", t.completedAt?.let { Ist.formatStamp(it) } ?: "",
                     t.completionRemarks ?: "",
                 ).joinToString(",") { csvCell(it.uppercase()) }
             ).append('\n')

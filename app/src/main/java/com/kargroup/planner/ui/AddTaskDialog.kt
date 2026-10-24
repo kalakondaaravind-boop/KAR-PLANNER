@@ -131,6 +131,7 @@ fun AddTaskDialog(
     val parent = request.parent
     var title by remember { mutableStateOf(base?.text ?: "") }
     var notes by remember { mutableStateOf(base?.notes ?: "") }
+    var statusNote by remember { mutableStateOf(base?.statusNote ?: "") }
     var projectId by remember { mutableStateOf(base?.projectId ?: request.defaultProjectId ?: parent?.projectId) }
     var priority by remember { mutableStateOf(base?.priority) }
     var dueDate by remember { mutableStateOf(if (base != null) base.dueDate else request.defaultDueDate) }
@@ -185,6 +186,7 @@ fun AddTaskDialog(
             template.copy(
                 text = title.trim(),
                 notes = notes.trim().ifBlank { null },
+                statusNote = statusNote.trim().ifBlank { null },
                 projectId = projectId,
                 priority = priority,
                 dueDate = if (recurring && dueDate == null) today else dueDate,
@@ -286,6 +288,16 @@ fun AddTaskDialog(
                     PillChip("🔵 Initiated", status == TaskStatus.INITIATED, KarColors.SkyDeep) { status = TaskStatus.INITIATED }
                     PillChip("🟢 Completed", status == TaskStatus.COMPLETED, KarColors.Green) { status = TaskStatus.COMPLETED }
                 }
+
+                OutlinedTextField(
+                    value = statusNote,
+                    onValueChange = { statusNote = it },
+                    label = { Text("Current status / latest update") },
+                    placeholder = { Text("e.g. Draft shared, awaiting client sign-off") },
+                    minLines = 1,
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                )
 
                 FieldLabel("Assigned to")
                 PersonPicker(

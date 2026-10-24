@@ -18,7 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PersonEntity::class,
         TaskHistoryEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -34,7 +34,7 @@ abstract class KarDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): KarDatabase =
             Room.databaseBuilder(context.applicationContext, KarDatabase::class.java, "kar_planner.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build()
 
         /** v2 adds target time, estimated effort and manual schedule order - existing data is kept. */
@@ -63,6 +63,13 @@ abstract class KarDatabase : RoomDatabase() {
                         "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))"
                 )
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_journal_entries_entry_date` ON `journal_entries` (`entry_date`)")
+            }
+        }
+
+        /** v8 adds the "current status" update text for each activity - existing data is kept. */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tasks ADD COLUMN status_note TEXT")
             }
         }
 

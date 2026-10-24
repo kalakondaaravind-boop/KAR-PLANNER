@@ -206,6 +206,7 @@ object BackupCodec {
                 status = if (isOpenStarted) TaskStatus.INITIATED else o.str("status")?.takeIf { it in TaskStatus.ALL && it != TaskStatus.COMPLETED },
                 assignee = o.str("assignee", "assignedTo", "assigned_to", "owner", "person", "responsible")?.trim()?.ifBlank { null },
                 completionRemarks = o.str("completion_remarks", "completionRemarks", "remarks", "closing_remarks"),
+                statusNote = o.str("status_note", "statusNote", "current_status", "currentStatus", "update", "latest_update"),
                 plannedStart = o.millis("planned_start", "plannedStart"),
                 manualOrder = o.num("manual_order", "manualOrder")?.toLong(),
                 isRecurring = recurring && freq != null,
@@ -402,6 +403,7 @@ object BackupCodec {
         .put("estimated_minutes", t.estimatedMinutes ?: JSONObject.NULL)
         .put("manual_order", t.manualOrder ?: JSONObject.NULL)
         .put("completion_remarks", t.completionRemarks ?: JSONObject.NULL)
+        .put("status_note", t.statusNote ?: JSONObject.NULL)
         .put("planned_start", t.plannedStart ?: JSONObject.NULL)
         .put("status", t.status ?: JSONObject.NULL)
         .put("assignee", t.assignee ?: JSONObject.NULL)

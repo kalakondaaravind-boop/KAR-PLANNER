@@ -76,6 +76,8 @@ data class TaskEntity(
     @ColumnInfo(name = "assignee") val assignee: String? = null,
     /** Remarks entered when the activity was completed (required on completion). */
     @ColumnInfo(name = "completion_remarks") val completionRemarks: String? = null,
+    /** Latest progress update ("current status"), e.g. "AWAITING CLIENT SIGN-OFF". */
+    @ColumnInfo(name = "status_note") val statusNote: String? = null,
     /** Start time fixed by the user in the Scheduler (epoch millis), or null to let the scheduler decide. */
     @ColumnInfo(name = "planned_start") val plannedStart: Long? = null,
     @ColumnInfo(name = "is_recurring") val isRecurring: Boolean = false,

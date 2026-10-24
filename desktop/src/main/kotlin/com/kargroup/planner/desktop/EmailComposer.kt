@@ -211,6 +211,31 @@ object EmailComposer {
             }
         }
 
+    /** Latest update for the "Current status" column (completion remarks once done). */
+    private fun currentStatus(t: TaskEntity): String? =
+        if (t.done) t.completionRemarks?.takeIf { it.isNotBlank() }?.let { "Completed: $it" }
+        else t.statusNote?.takeIf { it.isNotBlank() }
+
+    private fun notesCell(notes: String?): String =
+        notes?.trim()?.takeIf { it.isNotEmpty() }?.let { n ->
+            "<span style=\"font-size:9pt;color:$GREY\">${u(if (n.length > 300) n.take(300) + "…" else n)}</span>"
+        } ?: ""
+
+    /** Task table; "Current status" and "Notes" columns appear only when some row has them. */
+    private fun taskTable(list: List<TaskEntity>, projects: List<ProjectEntity>, today: String, withOwner: Boolean): String {
+        val showStatus = list.any { currentStatus(it) != null }
+        val showNotes = list.any { !it.notes.isNullOrBlank() }
+        val headers = taskHeaders(withOwner) + listOfNotNull("Current status".takeIf { showStatus }, "Notes".takeIf { showNotes })
+        val rows = taskRows(list, projects, today, withOwner).mapIndexed { i, r ->
+            val t = list[i]
+            r + listOfNotNull(
+                (currentStatus(t)?.let { u(it) } ?: "–").takeIf { showStatus },
+                notesCell(t.notes).takeIf { showNotes },
+            )
+        }
+        return table(headers, rows)
+    }
+
     private fun taskHeaders(withOwner: Boolean) =
         if (withOwner) listOf("#", "Activity", "Owner", "Target date", "Priority", "Status")
         else listOf("#", "Activity", "Target date", "Priority", "Status")
@@ -251,12 +276,17 @@ object EmailComposer {
                 append("</ol>")
             }
             val items = m.actionItems.filter { it.description.isNotBlank() }
+            val linked = items.associate { a -> a.id to data.tasks.firstOrNull { it.meetingActionItemId == a.id } }
+            val showStatus = linked.values.any { it != null && currentStatus(it) != null }
+            val showNotes = linked.values.any { !it?.notes.isNullOrBlank() }
             if (items.isNotEmpty()) {
                 append(heading("Action points"))
                 append(
                     table(
-                        listOf("#", "Action point", "Responsibility", "Target date", "Status"),
+                        listOf("#", "Action point", "Responsibility", "Target date", "Status") +
+                            listOfNotNull("Current status".takeIf { showStatus }, "Notes".takeIf { showNotes }),
                         items.mapIndexed { i, a ->
+                            val lt = linked[a.id]
                             val overdue = !a.completed && a.dueDate != null && a.dueDate < today
                             listOf(
                                 "${i + 1}",
@@ -270,6 +300,9 @@ object EmailComposer {
                                     else -> esc(Ist.formatFull(a.dueDate))
                                 },
                                 if (a.completed) fill("Closed", GRN_BG, GRN_FG, bold = true) else fill("Open", BLU_BG, BLU_FG),
+                            ) + listOfNotNull(
+                                (lt?.let { currentStatus(it) }?.let { u(it) } ?: "–").takeIf { showStatus },
+                                notesCell(lt?.notes).takeIf { showNotes },
                             )
                         },
                     )
@@ -313,9 +346,9 @@ object EmailComposer {
             val body = buildString {
                 append(para("Hi ${firstName(name)},"))
                 append(para("This is a gentle reminder of the action points assigned to you. Request you to update the status, or let me know if any target date needs revision."))
-                if (overdue.isNotEmpty()) { append(heading("Overdue (${overdue.size})", RED)); append(table(taskHeaders(false), taskRows(overdue, data.projects, todayStr, false))) }
-                if (dueToday.isNotEmpty()) { append(heading("Due today (${dueToday.size})", AMBER)); append(table(taskHeaders(false), taskRows(dueToday, data.projects, todayStr, false))) }
-                if (soon.isNotEmpty()) { append(heading("Due in the coming days (${soon.size})")); append(table(taskHeaders(false), taskRows(soon, data.projects, todayStr, false))) }
+                if (overdue.isNotEmpty()) { append(heading("Overdue (${overdue.size})", RED)); append(taskTable(overdue, data.projects, todayStr, false)) }
+                if (dueToday.isNotEmpty()) { append(heading("Due today (${dueToday.size})", AMBER)); append(taskTable(dueToday, data.projects, todayStr, false)) }
+                if (soon.isNotEmpty()) { append(heading("Due in the coming days (${soon.size})")); append(taskTable(soon, data.projects, todayStr, false)) }
             }
             val counts = listOfNotNull(
                 overdue.size.takeIf { it > 0 }?.let { "$it OVERDUE" },
@@ -370,7 +403,8 @@ object EmailComposer {
             }
             if (todays.isNotEmpty()) {
                 append(heading("Today's schedule"))
-                append(table(listOf("Time", "Activity", "Owner", "Target date", "Priority"), todays.map { si ->
+                val schedStatus = todays.any { currentStatus(it.task) != null }
+                append(table(listOf("Time", "Activity", "Owner", "Target date", "Priority") + listOfNotNull("Current status".takeIf { schedStatus }), todays.map { si ->
                     val t = si.task
                     listOf(
                         u(formatMillisTime24(si.startMillis) + "–" + formatMillisTime24(si.endMillis)),
@@ -378,12 +412,12 @@ object EmailComposer {
                         u(t.assignee ?: "–"),
                         targetCell(t, todayStr),
                         priorityCell(t.priority),
-                    )
+                    ) + listOfNotNull((currentStatus(t)?.let { u(it) } ?: "–").takeIf { schedStatus })
                 }))
             }
-            if (overdue.isNotEmpty()) { append(heading("Overdue (${overdue.size})", RED)); append(table(taskHeaders(true), taskRows(overdue, data.projects, todayStr, true))) }
-            if (dueToday.isNotEmpty()) { append(heading("Due today (${dueToday.size})", AMBER)); append(table(taskHeaders(true), taskRows(dueToday, data.projects, todayStr, true))) }
-            if (dueTomorrow.isNotEmpty()) { append(heading("Due tomorrow (${dueTomorrow.size})")); append(table(taskHeaders(true), taskRows(dueTomorrow, data.projects, todayStr, true))) }
+            if (overdue.isNotEmpty()) { append(heading("Overdue (${overdue.size})", RED)); append(taskTable(overdue, data.projects, todayStr, true)) }
+            if (dueToday.isNotEmpty()) { append(heading("Due today (${dueToday.size})", AMBER)); append(taskTable(dueToday, data.projects, todayStr, true)) }
+            if (dueTomorrow.isNotEmpty()) { append(heading("Due tomorrow (${dueTomorrow.size})")); append(taskTable(dueTomorrow, data.projects, todayStr, true)) }
             if (todays.isEmpty() && overdue.isEmpty() && dueToday.isEmpty()) append(para("Nothing is scheduled for today."))
         }
         return EmailDraft(
@@ -422,9 +456,9 @@ object EmailComposer {
             val body = buildString {
                 append(para("Hi ${firstName(name)},"))
                 append(para("Please find below your weekly update of open activities. Request you to review the target dates and update the status where required."))
-                if (overdue.isNotEmpty()) { append(heading("Overdue (${overdue.size})", RED)); append(table(taskHeaders(false), taskRows(overdue, data.projects, todayStr, false))) }
-                if (initiated.isNotEmpty()) { append(heading("Initiated (${initiated.size})")); append(table(taskHeaders(false), taskRows(initiated, data.projects, todayStr, false))) }
-                if (notStarted.isNotEmpty()) { append(heading("Not started (${notStarted.size})")); append(table(taskHeaders(false), taskRows(notStarted, data.projects, todayStr, false))) }
+                if (overdue.isNotEmpty()) { append(heading("Overdue (${overdue.size})", RED)); append(taskTable(overdue, data.projects, todayStr, false)) }
+                if (initiated.isNotEmpty()) { append(heading("Initiated (${initiated.size})")); append(taskTable(initiated, data.projects, todayStr, false)) }
+                if (notStarted.isNotEmpty()) { append(heading("Not started (${notStarted.size})")); append(taskTable(notStarted, data.projects, todayStr, false)) }
                 if (doneWeek.isNotEmpty()) {
                     append(heading("Completed in the last 7 days (${doneWeek.size}) – thank you", GREEN))
                     append(table(listOf("#", "Activity", "Completed", "Remarks"), doneWeek.mapIndexed { i, t ->

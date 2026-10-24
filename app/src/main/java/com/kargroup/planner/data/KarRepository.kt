@@ -124,6 +124,9 @@ class KarRepository(private val db: KarDatabase) {
         if ((old.status ?: TaskStatus.NOT_STARTED) != (task.status ?: TaskStatus.NOT_STARTED) && !task.done) {
             log(task.id, HistoryKind.STATUS, "Status: ${TaskStatus.label(old.status ?: TaskStatus.NOT_STARTED)} → ${TaskStatus.label(task.status ?: TaskStatus.NOT_STARTED)}")
         }
+        if ((old.statusNote ?: "") != (task.statusNote ?: "") && !task.statusNote.isNullOrBlank()) {
+            log(task.id, HistoryKind.STATUS, "Current status: ${task.statusNote}")
+        }
         val changed = buildList {
             if (old.text != task.text) add("title")
             if (old.priority != task.priority) add("priority")
@@ -206,6 +209,7 @@ class KarRepository(private val db: KarDatabase) {
                 dueDate = Recurrence.nextDueDate(task).toString(),
                 status = TaskStatus.NOT_STARTED,
                 completionRemarks = null,
+                statusNote = null,
             )
             val idMap = HashMap<String, String>()
             idMap[task.id] = next.id
@@ -223,6 +227,7 @@ class KarRepository(private val db: KarDatabase) {
                         createdAt = now,
                         meetingActionItemId = null,
                         completionRemarks = null,
+                        statusNote = null,
                     )
                 )
             }

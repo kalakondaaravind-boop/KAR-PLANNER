@@ -687,6 +687,9 @@ private fun ScheduleRow(
                 .padding(top = 10.dp, start = 2.dp)
         ) {
             Text(task.text, style = MaterialTheme.typography.titleSmall, color = KarColors.Ink)
+            task.statusNote?.takeIf { it.isNotBlank() }?.let { upd ->
+                Text("▸ $upd", style = MaterialTheme.typography.bodySmall, color = KarColors.SkyDeep, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
             item.path?.let { p ->
                 Text(
                     p,

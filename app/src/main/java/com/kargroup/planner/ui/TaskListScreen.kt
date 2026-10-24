@@ -457,6 +457,16 @@ fun TaskRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            val update = task.statusNote
+            if (!task.done && !update.isNullOrBlank()) {
+                Text(
+                    "▸ $update",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = KarColors.SkyDeep,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             val firstNoteLine = task.notes?.lineSequence()?.firstOrNull { it.isNotBlank() }
             if (firstNoteLine != null) {
                 Text(

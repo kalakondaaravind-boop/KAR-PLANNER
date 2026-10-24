@@ -82,6 +82,7 @@ fun SearchScreen(
                 val where = when {
                     t.text.contains(q, true) -> t.text
                     t.notes?.contains(q, true) == true -> "Notes: " + snippet(t.notes, q)
+                    t.statusNote?.contains(q, true) == true -> "Current status: " + snippet(t.statusNote, q)
                     t.completionRemarks?.contains(q, true) == true -> "Remarks: " + snippet(t.completionRemarks, q)
                     t.assignee?.contains(q, true) == true -> "Assigned to ${t.assignee}"
                     t.projectId?.let { projects[it]?.name }?.contains(q, true) == true -> "Project: ${projects[t.projectId]?.name}"
