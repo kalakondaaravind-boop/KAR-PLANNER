@@ -197,7 +197,7 @@ class CommercialStore(private val file: File = File(AppDirs.root, "commercials.j
                 CommercialColumn(id = "prob", name = "Prob.", type = ColType.PERCENT, width = 70, role = "PROB"),
                 CommercialColumn(id = "consultant", name = "Consultant", type = ColType.YESNO, width = 95),
                 CommercialColumn(id = "golive", name = "Go Live Date", type = ColType.DATE, width = 115),
-                CommercialColumn(id = "status", name = "Status", type = ColType.CHOICE, width = 120, role = "STATUS", options = STATUS_OPTIONS),
+                CommercialColumn(id = "status", name = "Status", type = ColType.CHOICE, width = 165, role = "STATUS", options = STATUS_OPTIONS),
             )
         }
     }
