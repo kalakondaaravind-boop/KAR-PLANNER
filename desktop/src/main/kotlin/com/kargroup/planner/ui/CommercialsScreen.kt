@@ -1,6 +1,16 @@
 package com.kargroup.planner.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.defaultScrollbarStyle
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -263,35 +273,33 @@ fun CommercialsScreen(store: CommercialStore, onMessage: (String) -> Unit) {
         // ------------------------------------------------------------ table
         DepthCard(Modifier.fillMaxWidth().weight(1f), elevation = 2.dp, shape = RoundedCornerShape(10.dp)) {
             val hScroll = rememberScrollState()
-            val tableWidth = (ROW_HEAD + visible.sumOf { it.width }).dp
-            Box(Modifier.fillMaxSize().horizontalScroll(hScroll)) {
-                Column(Modifier.width(tableWidth).fillMaxHeight()) {
-                    // header
-                    Row(Modifier.fillMaxWidth().background(KarColors.Navy).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("#", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.width(ROW_HEAD.dp).padding(start = 12.dp))
-                        visible.forEach { c ->
-                            HeaderCell(c, sort, onSort = {
-                                sort = when { sort?.first != c.id -> c.id to true; sort?.second == true -> c.id to false; else -> null }
-                            }, onEdit = { columnDialog = c })
+            val listState = rememberLazyListState()
+            // the client column (and row number) stay fixed while the other columns scroll sideways
+            val frozen = visible.firstOrNull { it.role == "CLIENT" } ?: visible.firstOrNull()
+            val rest = visible.filter { it.id != frozen?.id }
+            val frozenWidth = (ROW_HEAD + (frozen?.width ?: 0)).dp
+            CompositionLocalProvider(LocalScrollbarStyle provides tableScrollbarStyle()) {
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val restWidth = maxOf(rest.sumOf { it.width }.dp, maxWidth - frozenWidth - SCROLLBAR)
+                    Column(Modifier.fillMaxSize()) {
+                        // header
+                        TableLine(KarColors.Navy, restWidth, hScroll, Modifier.height(34.dp), frozenPart = {
+                            Text("#", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.width(ROW_HEAD.dp).padding(start = 12.dp))
+                            frozen?.let { c -> HeaderCell(c, sort, onSort = { sort = nextSort(sort, c.id) }, onEdit = { columnDialog = c }) }
+                        }) {
+                            rest.forEach { c -> HeaderCell(c, sort, onSort = { sort = nextSort(sort, c.id) }, onEdit = { columnDialog = c }) }
                         }
-                    }
-                    if (filtered.isEmpty()) {
-                        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                            Text(if (rows.isEmpty()) "No commercials yet — click “Add row” to start." else "No rows match the filter.",
-                                style = MaterialTheme.typography.bodyMedium, color = KarColors.Slate)
-                        }
-                    } else {
-                        LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-                            itemsIndexed(filtered, key = { _, r -> r.id }) { i, r ->
-                                Row(
-                                    Modifier.fillMaxWidth().height(34.dp).background(if (i % 2 == 1) KarColors.Tint else KarColors.Card),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    RowMenu(i + 1, onEdit = { rowDialog = r }, onDuplicate = { store.duplicate(r.id); onMessage("Row duplicated") },
-                                        onDelete = { confirmDelete = r })
-                                    visible.forEach { c ->
-                                        GridCell(
+                        Row(Modifier.fillMaxWidth().weight(1f)) {
+                            if (filtered.isEmpty()) {
+                                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                                    Text(if (rows.isEmpty()) "No commercials yet — click “Add row” to start." else "No rows match the filter.",
+                                        style = MaterialTheme.typography.bodyMedium, color = KarColors.Slate)
+                                }
+                            } else {
+                                LazyColumn(Modifier.weight(1f).fillMaxHeight(), state = listState) {
+                                    itemsIndexed(filtered, key = { _, r -> r.id }) { i, r ->
+                                        val cell: @Composable (CommercialColumn) -> Unit = { c -> GridCell(
                                             row = r, col = c, byId = byId,
                                             editing = editing == (r.id to c.id),
                                             onStartEdit = { editing = r.id to c.id },
@@ -301,18 +309,22 @@ fun CommercialsScreen(store: CommercialStore, onMessage: (String) -> Unit) {
                                             },
                                             onCancel = { editing = null },
                                             onPick = { v -> store.setCell(r.id, c.id, v) },
-                                        )
+                                        ) }
+                                        TableLine(if (i % 2 == 1) KarColors.Tint else KarColors.Card, restWidth, hScroll, Modifier.height(34.dp), scrollbarGap = false, frozenPart = {
+                                            RowMenu(i + 1, onEdit = { rowDialog = r }, onDuplicate = { store.duplicate(r.id); onMessage("Row duplicated") },
+                                                onDelete = { confirmDelete = r })
+                                            frozen?.let { cell(it) }
+                                        }) {
+                                            rest.forEach { cell(it) }
+                                        }
+                                        HorizontalDivider(color = KarColors.Border.copy(alpha = 0.6f))
                                     }
                                 }
-                                HorizontalDivider(color = KarColors.Border.copy(alpha = 0.6f))
                             }
+                            VerticalScrollbar(rememberScrollbarAdapter(listState), Modifier.fillMaxHeight().width(SCROLLBAR))
                         }
-                    }
-                    // totals
-                    Row(Modifier.fillMaxWidth().background(KarColors.SkyWash).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Total", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = KarColors.Navy,
-                            modifier = Modifier.width(ROW_HEAD.dp).padding(start = 12.dp))
-                        visible.forEach { c ->
+                        // totals
+                        val total: @Composable (CommercialColumn) -> Unit = { c ->
                             val t = Commercials.formatType(c)
                             val text = when {
                                 c.role == "CLIENT" -> "${filtered.size} rows"
@@ -322,9 +334,25 @@ fun CommercialsScreen(store: CommercialStore, onMessage: (String) -> Unit) {
                                     ?.let { Commercials.fmt(it.sum(), t) } ?: ""
                                 else -> ""
                             }
-                            Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = KarColors.Navy, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis, textAlign = if (ColType.numeric(t)) TextAlign.End else TextAlign.Start,
-                                modifier = Modifier.width(c.width.dp).padding(horizontal = 8.dp))
+                            Box(Modifier.width(c.width.dp).fillMaxHeight().gridLine().padding(horizontal = CELL_PAD),
+                                contentAlignment = if (isRightAligned(c)) Alignment.CenterEnd else Alignment.CenterStart) {
+                                Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = KarColors.Navy, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                        TableLine(KarColors.SkyWash, restWidth, hScroll, Modifier.height(34.dp), frozenPart = {
+                            Text("Total", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = KarColors.Navy,
+                                modifier = Modifier.width(ROW_HEAD.dp).padding(start = 12.dp))
+                            frozen?.let { total(it) }
+                        }) {
+                            rest.forEach { total(it) }
+                        }
+                        // scroll bar to see all the columns
+                        Row(Modifier.fillMaxWidth().background(KarColors.SkyWash), verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (hScroll.maxValue > 0) "◀ ▶  scroll for more columns" else "", style = MaterialTheme.typography.labelSmall, color = KarColors.SlateLight,
+                                maxLines = 1, modifier = Modifier.width(frozenWidth).padding(start = 12.dp))
+                            HorizontalScrollbar(rememberScrollbarAdapter(hScroll), Modifier.weight(1f).height(SCROLLBAR + 4.dp).padding(vertical = 2.dp))
+                            Spacer(Modifier.width(SCROLLBAR))
                         }
                     }
                 }
@@ -364,16 +392,70 @@ fun CommercialsScreen(store: CommercialStore, onMessage: (String) -> Unit) {
 
 @Composable
 private fun HeaderCell(c: CommercialColumn, sort: Pair<String, Boolean>?, onSort: () -> Unit, onEdit: () -> Unit) {
-    Row(Modifier.width(c.width.dp).clickable(onClick = onSort).padding(start = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(c.name, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1,
-            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-        if (sort?.first == c.id) Icon(if (sort.second) Icons.Outlined.ArrowUpward else Icons.Outlined.ArrowDownward, null,
-            tint = KarColors.Gold, modifier = Modifier.padding(start = 2.dp).size(12.dp))
-        Spacer(Modifier.weight(0.01f))
-        Icon(Icons.Outlined.MoreVert, "Edit column", tint = Color.White.copy(alpha = 0.6f),
-            modifier = Modifier.size(22.dp).clickable(onClick = onEdit).padding(4.dp))
+    val right = isRightAligned(c)
+    val menu: @Composable () -> Unit = { Icon(Icons.Outlined.MoreVert, "Edit column", tint = Color.White.copy(alpha = 0.55f),
+        modifier = Modifier.size(20.dp).clickable(onClick = onEdit).padding(3.dp)) }
+    val arrow: @Composable () -> Unit = { if (sort?.first == c.id) Icon(if (sort.second) Icons.Outlined.ArrowUpward else Icons.Outlined.ArrowDownward, null,
+        tint = KarColors.Gold, modifier = Modifier.padding(horizontal = 2.dp).size(12.dp)) }
+    Row(Modifier.width(c.width.dp).fillMaxHeight().gridLine(Color.White.copy(alpha = 0.15f)).clickable(onClick = onSort)
+        .padding(start = if (right) 2.dp else CELL_PAD, end = if (right) CELL_PAD else 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (right) {
+            menu(); Spacer(Modifier.weight(1f)); arrow()
+            Text(c.name, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, modifier = Modifier.weight(5f, fill = false))
+        } else {
+            Text(c.name, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(5f, fill = false))
+            arrow(); Spacer(Modifier.weight(1f)); menu()
+        }
     }
 }
+
+/** Numbers, amounts and percentages line up on the right, everything else on the left. */
+private fun isRightAligned(c: CommercialColumn) = ColType.numeric(Commercials.formatType(c))
+
+private val CELL_PAD = 10.dp
+private val SCROLLBAR = 12.dp
+
+/** Thin line on the right edge of a cell (grid look). */
+private fun Modifier.gridLine(color: Color? = null): Modifier = drawBehind {
+    val c = color ?: KarColors.Border.copy(alpha = 0.7f)
+    drawLine(c, Offset(size.width - 0.5f, 0f), Offset(size.width - 0.5f, size.height), strokeWidth = 1f)
+}
+
+private fun nextSort(sort: Pair<String, Boolean>?, id: String): Pair<String, Boolean>? =
+    when { sort?.first != id -> id to true; sort?.second == true -> id to false; else -> null }
+
+/** One table line: fixed part on the left, the remaining columns scroll sideways together (shared [h] state). */
+@Composable
+private fun TableLine(
+    bg: Color,
+    restWidth: androidx.compose.ui.unit.Dp,
+    h: androidx.compose.foundation.ScrollState,
+    modifier: Modifier = Modifier,
+    scrollbarGap: Boolean = true,
+    frozenPart: @Composable () -> Unit,
+    scrollPart: @Composable () -> Unit,
+) {
+    Row(modifier.fillMaxWidth().background(bg), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxHeight().drawBehind {
+            drawLine(KarColors.Slate.copy(alpha = 0.35f), Offset(size.width - 1f, 0f), Offset(size.width - 1f, size.height), strokeWidth = 2f)
+        }, verticalAlignment = Alignment.CenterVertically) { frozenPart() }
+        Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(h)) {
+            Row(Modifier.width(restWidth).fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) { scrollPart() }
+        }
+        if (scrollbarGap) Spacer(Modifier.width(SCROLLBAR))
+    }
+}
+
+@Composable
+private fun tableScrollbarStyle() = defaultScrollbarStyle().copy(
+    thickness = 9.dp,
+    shape = RoundedCornerShape(5.dp),
+    unhoverColor = KarColors.Slate.copy(alpha = 0.45f),
+    hoverColor = KarColors.SkyDeep.copy(alpha = 0.85f),
+    minimalHeight = 24.dp,
+)
 
 @Composable
 private fun RowMenu(n: Int, onEdit: () -> Unit, onDuplicate: () -> Unit, onDelete: () -> Unit) {
@@ -407,15 +489,15 @@ private fun GridCell(
     val shown = Commercials.display(row, col, byId)
     val type = Commercials.formatType(col)
     val numeric = ColType.numeric(type)
-    val mod = Modifier.width(col.width.dp).fillMaxHeight()
+    val mod = Modifier.width(col.width.dp).fillMaxHeight().gridLine()
     when {
-        col.type == ColType.FORMULA -> Box(mod.background(KarColors.SkyWash.copy(alpha = 0.5f)).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
+        col.type == ColType.FORMULA -> Box(mod.background(KarColors.SkyWash.copy(alpha = 0.5f)).padding(horizontal = CELL_PAD), contentAlignment = if (numeric) Alignment.CenterEnd else Alignment.CenterStart) {
             Text(shown, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = KarColors.Navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         col.type == ColType.CHOICE || col.type == ColType.YESNO -> {
             var open by remember { mutableStateOf(false) }
             val options = if (col.type == ColType.YESNO) listOf("Yes", "No") else col.options
-            Box(mod.clickable { open = true }.padding(horizontal = 6.dp), contentAlignment = Alignment.CenterStart) {
+            Box(mod.clickable { open = true }.padding(horizontal = CELL_PAD), contentAlignment = Alignment.CenterStart) {
                 if (shown.isNotBlank()) {
                     val c = if (col.type == ColType.YESNO) (if (shown.equals("Yes", true)) Color(0xFF059669) else KarColors.Slate) else commercialStatusColor(shown)
                     Text(shown, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = c, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -452,7 +534,7 @@ private fun GridCell(
                     singleLine = true,
                     textStyle = MaterialTheme.typography.labelMedium.copy(color = KarColors.Ink, textAlign = if (numeric) TextAlign.End else TextAlign.Start),
                     cursorBrush = SolidColor(KarColors.SkyDeep),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp).focusRequester(fr)
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = CELL_PAD - 2.dp).focusRequester(fr)
                         .onFocusChanged { if (it.isFocused) focused = true else if (focused) finish(0, 0) }
                         .onPreviewKeyEvent { e ->
                             if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -473,7 +555,7 @@ private fun GridCell(
                 col.role == "CLIENT" -> KarColors.Navy
                 else -> KarColors.Ink
             }
-            Box(mod.clickable(onClick = onStartEdit).padding(horizontal = 8.dp), contentAlignment = if (numeric) Alignment.CenterEnd else Alignment.CenterStart) {
+            Box(mod.clickable(onClick = onStartEdit).padding(horizontal = CELL_PAD), contentAlignment = if (numeric) Alignment.CenterEnd else Alignment.CenterStart) {
                 Text(shown, style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     fontWeight = if (col.role == "CLIENT" || col.role == "PROB") FontWeight.SemiBold else FontWeight.Normal)
             }
