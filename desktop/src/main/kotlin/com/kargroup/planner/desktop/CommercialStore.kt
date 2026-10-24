@@ -83,7 +83,7 @@ class CommercialStore(private val file: File = File(AppDirs.root, "commercials.j
                     ColFormula(f.optString("a"), f.optString("op", "MUL"), f.str("b"),
                         if (f.has("constant") && !f.isNull("constant")) f.optDouble("constant") else null, f.optString("format", ColType.CURRENCY))
                 },
-                width = c.optInt("width", 130), hidden = c.optBoolean("hidden"), role = c.str("role"),
+                width = c.optInt("width", 130).let { w -> OLD_WIDTHS[c.optString("id") to w] ?: w }, hidden = c.optBoolean("hidden"), role = c.str("role"),
             )
         }
         val rs = o.optJSONArray("rows") ?: JSONArray()
@@ -210,6 +210,9 @@ class CommercialStore(private val file: File = File(AppDirs.root, "commercials.j
     fun resetColumns() { _columns.value = defaultColumns(); save() }
 
     companion object {
+        /** Earlier default widths that cut off headings → new widths. */
+        private val OLD_WIDTHS = mapOf(("revenue" to 150) to 185, ("consultant" to 95) to 120, ("status" to 120) to 165)
+
         val STATUS_OPTIONS = listOf("Received", "Commercials shared", "Won", "Lost", "On Hold")
 
         fun defaultColumns(): List<CommercialColumn> {
@@ -220,10 +223,10 @@ class CommercialStore(private val file: File = File(AppDirs.root, "commercials.j
                 CommercialColumn(id = "process", name = "Process", type = ColType.TEXT, width = 120),
                 CommercialColumn(id = "location", name = "Location", type = ColType.TEXT, width = 120),
                 fte, rate,
-                CommercialColumn(id = "revenue", name = "Monthly Revenue (₹)", type = ColType.FORMULA, width = 150, role = "REVENUE",
+                CommercialColumn(id = "revenue", name = "Monthly Revenue (₹)", type = ColType.FORMULA, width = 185, role = "REVENUE",
                     formula = ColFormula(a = fte.id, op = "MUL", b = rate.id, format = ColType.CURRENCY)),
                 CommercialColumn(id = "prob", name = "Prob.", type = ColType.PERCENT, width = 70, role = "PROB"),
-                CommercialColumn(id = "consultant", name = "Consultant", type = ColType.YESNO, width = 95),
+                CommercialColumn(id = "consultant", name = "Consultant", type = ColType.YESNO, width = 120),
                 CommercialColumn(id = "golive", name = "Go Live Date", type = ColType.DATE, width = 115),
                 CommercialColumn(id = "status", name = "Status", type = ColType.CHOICE, width = 165, role = "STATUS", options = STATUS_OPTIONS),
             )
