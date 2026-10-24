@@ -773,6 +773,7 @@ fun screenTitle(screen: Screen, projects: Map<String, ProjectEntity>, contexts: 
     Screen.Reports -> "Reports"
     Screen.Search -> "Search"
     Screen.Settings -> "Settings"
+    Screen.Emails -> "Outlook E-mails"
     is Screen.Person -> screen.name ?: "Unassigned"
 }
 

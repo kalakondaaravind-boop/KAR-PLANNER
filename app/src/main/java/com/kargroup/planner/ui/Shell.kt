@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.ViewList
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
@@ -264,6 +265,8 @@ internal fun Sidebar(
     onExport: () -> Unit,
     onImport: () -> Unit,
     onDeleteAll: () -> Unit,
+    /** Desktop only: number of Outlook e-mails waiting for review (null hides the item). */
+    emailCount: Int? = null,
 ) {
     val counts = remember(tasks, today) { navCounts(tasks, today) }
 
@@ -302,6 +305,9 @@ internal fun Sidebar(
         NavItem("My Journal", Icons.Outlined.Book, screen == Screen.Journal, null) { onNavigate(Screen.Journal) }
 
         NavLabel("Utilities")
+        if (emailCount != null) {
+            NavItem("Outlook E-mails", Icons.Outlined.Email, screen == Screen.Emails, emailCount.takeIf { it > 0 }, KarColors.Amber) { onNavigate(Screen.Emails) }
+        }
         NavItem("Search", Icons.Outlined.Search, screen == Screen.Search, null) { onNavigate(Screen.Search) }
         NavItem("Settings", Icons.Outlined.Settings, screen == Screen.Settings, null) { onNavigate(Screen.Settings) }
         NavItem("Reminders", Icons.Outlined.NotificationsActive, false, alertCount.takeIf { it > 0 }, KarColors.Amber, onClick = onReminders)
@@ -434,6 +440,7 @@ internal fun NavRail(
     onExport: () -> Unit,
     onImport: () -> Unit,
     onDeleteAll: () -> Unit,
+    emailCount: Int? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -477,6 +484,9 @@ internal fun NavRail(
         RailItem("Reports", Icons.Outlined.Insights, screen == Screen.Reports) { onNavigate(Screen.Reports) }
         RailItem("Journal", Icons.Outlined.Book, screen == Screen.Journal) { onNavigate(Screen.Journal) }
         RailDivider()
+        if (emailCount != null) {
+            RailItem(if (emailCount > 0) "E-mails ($emailCount)" else "E-mails", Icons.Outlined.Email, screen == Screen.Emails) { onNavigate(Screen.Emails) }
+        }
         RailItem("Settings", Icons.Outlined.Settings, screen == Screen.Settings) { onNavigate(Screen.Settings) }
         RailItem(if (alertCount > 0) "Alerts ($alertCount)" else "Alerts", Icons.Outlined.NotificationsActive, false, onClick = onReminders)
         RailItem("Export", Icons.Outlined.Download, false, onClick = onExport)

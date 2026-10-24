@@ -1,0 +1,70 @@
+name: Build KAR Planner for Windows
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'desktop/**'
+      - 'app/src/main/java/**'
+      - '.github/workflows/build-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build installer (.exe and .msi)
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew packageExe packageMsi --no-daemon 2>&1 | tee build.log
+          mkdir -p out
+          cp build/compose/binaries/main/exe/*.exe "out/KAR-Planner-Setup.exe"
+          cp build/compose/binaries/main/msi/*.msi "out/KAR-Planner-Setup.msi"
+          ls -la out
+
+      - name: Show build errors
+        if: failure()
+        run: |
+          grep -E "^e: |error:|FAILURE|What went wrong" -A3 build.log | sed 's#file:///D:/a/[^/]*/[^/]*/##' | head -60 > errors.txt || true
+          while IFS= read -r line; do echo "::error::$line"; done < errors.txt
+          {
+            echo "## Build errors"
+            echo '```'
+            cat errors.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload installer (Actions artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAR-Planner-Windows
+          path: desktop/out/*
+
+      - name: Publish as a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-${{ github.run_number }}
+          name: KAR Planner for Windows ${{ github.run_number }}
+          body: |
+            Download **KAR-Planner-Setup.exe** and double-click it to install KAR Planner on your Windows PC
+            (no administrator rights needed). The .msi is the same app for IT-managed installs.
+          files: |
+            desktop/out/KAR-Planner-Setup.exe
+            desktop/out/KAR-Planner-Setup.msi

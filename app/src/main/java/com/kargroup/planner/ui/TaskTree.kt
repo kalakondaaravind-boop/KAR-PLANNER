@@ -369,6 +369,6 @@ fun buildSections(
             ).filter { it.rows.isNotEmpty() }
         }
         Screen.Projects, Screen.Meetings, Screen.Schedule, Screen.Journal, Screen.People,
-        Screen.Reports, Screen.Search, Screen.Settings -> emptyList()
+        Screen.Reports, Screen.Search, Screen.Settings, Screen.Emails -> emptyList()
     }
 }
