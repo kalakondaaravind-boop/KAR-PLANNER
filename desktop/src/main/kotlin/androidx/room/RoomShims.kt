@@ -30,6 +30,9 @@ annotation class Query(val value: String)
 @Target(AnnotationTarget.FUNCTION)
 annotation class Upsert
 
+@Target(AnnotationTarget.FUNCTION)
+annotation class TypeConverter
+
 abstract class RoomDatabase
 
 /** Runs [block]; the desktop store is single-user and saves after every change. */

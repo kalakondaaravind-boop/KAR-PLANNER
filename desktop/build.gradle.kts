@@ -24,6 +24,7 @@ dependencies {
  */
 val sharedSources = listOf(
     "com/kargroup/planner/data/BackupCodec.kt",
+    "com/kargroup/planner/data/Converters.kt",
     "com/kargroup/planner/data/Daos.kt",
     "com/kargroup/planner/data/Entities.kt",
     "com/kargroup/planner/data/KarRepository.kt",

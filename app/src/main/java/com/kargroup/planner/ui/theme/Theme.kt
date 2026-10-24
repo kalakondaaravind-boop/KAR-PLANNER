@@ -49,8 +49,15 @@ val PaletteChoices = listOf(
     "#F5A623", "#F59E0B", "#EF4444", "#EC4899", "#8B5CF6", "#64748B",
 )
 
-fun parseHexColor(hex: String?, fallback: Color = KarColors.Navy2): Color =
-    runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(fallback)
+/** "#RRGGBB" or "#AARRGGBB" → Color (plain Kotlin, so the desktop app can share it). */
+fun parseHexColor(hex: String?, fallback: Color = KarColors.Navy2): Color = runCatching {
+    val h = hex!!.trim().removePrefix("#")
+    when (h.length) {
+        6 -> Color((0xFF000000L or h.toLong(16)).toInt())
+        8 -> Color(h.toLong(16).toInt())
+        else -> fallback
+    }
+}.getOrDefault(fallback)
 
 private val KarScheme = lightColorScheme(
     primary = KarColors.SkyDeep,
