@@ -195,6 +195,7 @@ fun SettingsScreen(
                         onValueChange = { v -> name = v; onEmailUpdate { it.copy(myName = v.trim()) } },
                         label = { Text("Your name") },
                         singleLine = true,
+                        keepCase = true,
                         modifier = Modifier.widthIn(min = 220.dp, max = 360.dp),
                     )
                     OutlinedTextField(
@@ -210,11 +211,18 @@ fun SettingsScreen(
                 OutlinedTextField(
                     value = sign,
                     onValueChange = { v -> sign = v; onEmailUpdate { it.copy(signature = v) } },
-                    label = { Text("Signature line (designation, company, phone)") },
-                    minLines = 2,
-                    maxLines = 4,
+                    label = { Text("Typed signature (used only when the Outlook signature is off)") },
+                    minLines = 3,
+                    maxLines = 9,
+                    keepCase = true,
+                    enabled = !email.useOutlookSignature,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 )
+                ToggleRow(
+                    "Use my Outlook signature",
+                    "Adds your default Outlook signature (with logo) below each e-mail, exactly as when you write one yourself",
+                    email.useOutlookSignature,
+                ) { on -> onEmailUpdate { it.copy(useOutlookSignature = on) } }
                 ToggleRow("Copy me (CC)", "Put yourself in CC on MoM, reminder and weekly e-mails", email.ccMe) { on -> onEmailUpdate { it.copy(ccMe = on) } }
                 HorizontalDivider(color = KarColors.Border, modifier = Modifier.padding(vertical = 6.dp))
                 ToggleRow("Daily digest to me", "Your schedule, meetings, overdue and due items for the day", email.digestOn) { on -> onEmailUpdate { it.copy(digestOn = on) } }

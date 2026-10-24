@@ -126,7 +126,7 @@ class EmailCenter(private val app: DesktopApp) {
         val missingTo = drafts.filter { it.to.isBlank() }
         val ready = drafts - missingTo.toSet()
         if (ready.isEmpty()) return@withContext "Add at least one recipient in 'To' first."
-        val r = OutlookMailer.run(ready, mode)
+        val r = OutlookMailer.run(ready, mode, store.settings.value.useOutlookSignature)
         if (r.fatal != null) return@withContext "Outlook: ${r.fatal}"
         val done = ready.filter { it.id in r.ok }
         store.recordSent(done, mode.arg)

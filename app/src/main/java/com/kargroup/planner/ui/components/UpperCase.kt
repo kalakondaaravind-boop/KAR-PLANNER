@@ -87,8 +87,10 @@ fun OutlinedTextField(
     singleLine: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     minLines: Int = 1,
+    /** True for free text that must keep its case (e.g. an e-mail signature). */
+    keepCase: Boolean = false,
 ) {
-    val keepCase = keyboardOptions.keyboardType == KeyboardType.Email ||
+    val keepCase = keepCase || keyboardOptions.keyboardType == KeyboardType.Email ||
         keyboardOptions.keyboardType == KeyboardType.Password ||
         keyboardOptions.keyboardType == KeyboardType.NumberPassword
     androidx.compose.material3.OutlinedTextField(

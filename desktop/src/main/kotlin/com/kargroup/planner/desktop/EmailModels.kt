@@ -68,6 +68,8 @@ data class EmailSettings(
     val myEmail: String = "",
     val ccMe: Boolean = true,
     val signature: String = "",
+    /** Use the default signature set up in Outlook (with logo) instead of the typed one. */
+    val useOutlookSignature: Boolean = true,
     val digestOn: Boolean = true,
     val digestTime: Int = 8 * 60 + 30,
     val remindersOn: Boolean = true,
@@ -105,7 +107,7 @@ class EmailStore(private val prefs: SharedPreferences, private val queueFile: Fi
         _settings.value = s
         prefs.edit()
             .putString("my_name", s.myName).putString("my_email", s.myEmail).putBoolean("cc_me", s.ccMe)
-            .putString("signature", s.signature)
+            .putString("signature", s.signature).putBoolean("use_outlook_signature", s.useOutlookSignature)
             .putBoolean("digest_on", s.digestOn).putInt("digest_time", s.digestTime)
             .putBoolean("reminders_on", s.remindersOn).putInt("reminder_days", s.reminderDaysAhead)
             .putBoolean("remind_overdue", s.remindOverdue)
@@ -121,6 +123,7 @@ class EmailStore(private val prefs: SharedPreferences, private val queueFile: Fi
             myEmail = prefs.getString("my_email", d.myEmail) ?: "",
             ccMe = prefs.getBoolean("cc_me", d.ccMe),
             signature = prefs.getString("signature", d.signature) ?: "",
+            useOutlookSignature = prefs.getBoolean("use_outlook_signature", d.useOutlookSignature),
             digestOn = prefs.getBoolean("digest_on", d.digestOn),
             digestTime = prefs.getInt("digest_time", d.digestTime),
             remindersOn = prefs.getBoolean("reminders_on", d.remindersOn),

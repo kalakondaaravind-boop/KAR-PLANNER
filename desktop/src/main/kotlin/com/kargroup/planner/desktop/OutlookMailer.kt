@@ -40,7 +40,21 @@ foreach (${'$'}m in @(${'$'}items)) {
     ${'$'}mail.To = [string]${'$'}m.to
     if (${'$'}m.cc) { ${'$'}mail.CC = [string]${'$'}m.cc }
     ${'$'}mail.Subject = [string]${'$'}m.subject
-    ${'$'}mail.HTMLBody = [string]${'$'}m.html
+    if (${'$'}m.sig) {
+      # Opening the inspector makes Outlook add your default signature; put our text above it.
+      ${'$'}null = ${'$'}mail.GetInspector
+      ${'$'}h = [string]${'$'}mail.HTMLBody
+      ${'$'}plain = ([string]${'$'}mail.Body).Trim()
+      ${'$'}mt = [regex]::Match(${'$'}h, '<body[^>]*>', 'IgnoreCase')
+      if (${'$'}plain.Length -gt 0 -and ${'$'}mt.Success) {
+        ${'$'}i = ${'$'}mt.Index + ${'$'}mt.Length
+        ${'$'}mail.HTMLBody = ${'$'}h.Substring(0, ${'$'}i) + [string]${'$'}m.body + '<p>&nbsp;</p>' + ${'$'}h.Substring(${'$'}i)
+      } else {
+        ${'$'}mail.HTMLBody = [string]${'$'}m.html
+      }
+    } else {
+      ${'$'}mail.HTMLBody = [string]${'$'}m.html
+    }
     if (${'$'}Mode -eq 'display') { ${'$'}mail.Display(${'$'}false) }
     elseif (${'$'}Mode -eq 'draft') { ${'$'}mail.Save() }
     else {
@@ -56,7 +70,14 @@ foreach (${'$'}m in @(${'$'}items)) {
 
     val isSupported: Boolean get() = AppDirs.isWindows
 
-    fun run(drafts: List<EmailDraft>, mode: Mode): Result {
+    /** The part between the body markers (without any typed signature). */
+    private fun innerBody(html: String): String {
+        val a = html.indexOf(EmailComposer.BODY_START)
+        val b = html.indexOf(EmailComposer.BODY_END)
+        return if (a >= 0 && b > a) html.substring(a + EmailComposer.BODY_START.length, b) else html
+    }
+
+    fun run(drafts: List<EmailDraft>, mode: Mode, useOutlookSignature: Boolean = true): Result {
         if (drafts.isEmpty()) return Result(emptySet(), emptyMap())
         if (!isSupported) return Result(emptySet(), emptyMap(), "Outlook e-mail works on Windows with the classic Outlook app installed.")
         val dir = AppDirs.tempDir
@@ -66,6 +87,7 @@ foreach (${'$'}m in @(${'$'}items)) {
             json.writeText(
                 JSONArray(drafts.map {
                     JSONObject().put("id", it.id).put("to", it.to).put("cc", it.cc).put("subject", it.subject).put("html", it.html)
+                        .put("body", innerBody(it.html)).put("sig", useOutlookSignature && it.kind != EmailKind.DIGEST)
                 }).toString(),
                 Charsets.UTF_8,
             )
