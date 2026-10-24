@@ -51,7 +51,7 @@ fun KarLogo(
     onDark: Boolean = false,
 ) {
     Image(
-        painter = painterResource(if (onDark) "kar_logo_white.png" else "kar_logo.png"),
+        painter = painterResource(if (onDark || com.kargroup.planner.ui.theme.KarPalette.dark) "kar_logo_white.png" else "kar_logo.png"),
         contentDescription = "KAR Group",
         contentScale = ContentScale.Fit,
         modifier = modifier.height(height).aspectRatio(722f / 244f),
