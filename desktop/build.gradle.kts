@@ -89,3 +89,15 @@ compose.desktop {
         }
     }
 }
+
+/** CI check: sample data → all e-mail types as HTML + screenshots of the main screens. */
+tasks.register<JavaExec>("smoke") {
+    dependsOn("classes")
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.kargroup.planner.desktop.Smoke")
+    val appData = layout.buildDirectory.dir("smoke-appdata").get().asFile
+    val outDir = layout.buildDirectory.dir("smoke").get().asFile
+    doFirst { appData.deleteRecursively(); appData.mkdirs() }
+    environment("APPDATA", appData.absolutePath)
+    args(outDir.absolutePath)
+}

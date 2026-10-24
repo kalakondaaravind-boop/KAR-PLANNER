@@ -34,7 +34,7 @@ import com.kargroup.planner.ui.theme.KarTheme
  * The shared theme draws text at 75% of the system size (tuned for the tablet). On a PC that
  * is too small, so the desktop scales fonts back up to about 95% of the Windows size.
  */
-private const val DESKTOP_FONT_SCALE = 0.95f / 0.75f
+internal const val DESKTOP_FONT_SCALE = 0.95f / 0.75f
 
 @Suppress("DEPRECATION")
 fun main(args: Array<String>) {

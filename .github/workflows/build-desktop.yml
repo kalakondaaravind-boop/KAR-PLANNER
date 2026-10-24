@@ -13,6 +13,38 @@ permissions:
   contents: write
 
 jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Sample data, e-mails and screenshots
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew smoke --no-daemon 2>&1 | tee smoke.log
+      - name: Show errors
+        if: failure()
+        run: |
+          grep -E "^e: |Exception|Error|SMOKE|at com.kargroup" smoke.log | head -60 > errors.txt || true
+          while IFS= read -r line; do echo "::error::$line"; done < errors.txt
+      - name: Publish preview files
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-preview
+          name: Desktop preview (sample e-mails and screenshots)
+          prerelease: true
+          body: Automatically generated sample e-mails and screenshots from the desktop build check.
+          files: desktop/build/smoke/*
+
   windows:
     runs-on: windows-latest
     defaults:
