@@ -58,6 +58,7 @@ import com.kargroup.planner.ui.components.DepthCard
 import com.kargroup.planner.ui.components.Text
 import com.kargroup.planner.ui.components.OutlinedTextField
 import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.TextFields
 import com.kargroup.planner.ui.theme.KarColors
 import com.kargroup.planner.util.Ist
 
@@ -79,6 +80,9 @@ fun SettingsScreen(
     onExport: () -> Unit,
     onImport: () -> Unit,
     onStartWithWindows: (Boolean) -> Unit,
+    textSize: Float,
+    onTextSize: (Float) -> Unit,
+    onToggleDark: () -> Unit,
 ) {
     val context: Any? = null
     var editTime by remember { mutableStateOf<TimeField?>(null) }
@@ -92,6 +96,50 @@ fun SettingsScreen(
         contentPadding = PaddingValues(start = hPad, end = hPad, top = 16.dp, bottom = 60.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // ---------------------------------------------------------------- display
+        item {
+            Section("Display", Icons.Outlined.TextFields) {
+                Text("Text size", style = MaterialTheme.typography.labelMedium, color = KarColors.Navy)
+                Text(
+                    "Applies everywhere in the app straight away. Shortcuts: Ctrl + plus, Ctrl + minus, Ctrl + 0 to reset.",
+                    style = MaterialTheme.typography.bodySmall, color = KarColors.Slate,
+                )
+                Spacer(Modifier.height(8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(0.55f to "Extra small", 0.60f to "Small", 0.70f to "Medium", 0.80f to "Large", 0.95f to "Extra large", 1.10f to "Huge").forEach { (v, label) ->
+                        FilterChip(
+                            selected = kotlin.math.abs(textSize - v) < 0.01f,
+                            onClick = { onTextSize(v) },
+                            label = { Text("$label (${Math.round(v * 100)}%)") },
+                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = KarColors.SkyDeep, selectedLabelColor = Color.White),
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                    Text("A", style = MaterialTheme.typography.labelSmall, color = KarColors.Slate)
+                    androidx.compose.material3.Slider(
+                        value = textSize,
+                        onValueChange = { onTextSize(it) },
+                        valueRange = com.kargroup.planner.desktop.DisplayPrefs.MIN..com.kargroup.planner.desktop.DisplayPrefs.MAX,
+                        steps = 13,
+                        colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = KarColors.SkyDeep, activeTrackColor = KarColors.SkyDeep),
+                        modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                    )
+                    Text("A", style = MaterialTheme.typography.titleLarge, color = KarColors.Slate)
+                    Spacer(Modifier.width(14.dp))
+                    Text("${Math.round(textSize * 100)}%", fontWeight = FontWeight.Bold, color = KarColors.SkyDeep, modifier = Modifier.width(52.dp))
+                }
+                Surface(color = KarColors.SkyWash, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Preview: Submit Q3 compliance report", style = MaterialTheme.typography.titleSmall, color = KarColors.Navy)
+                        Text("Priya Sharma · due today · draft shared, awaiting sign-off", style = MaterialTheme.typography.bodySmall, color = KarColors.Slate)
+                    }
+                }
+                HorizontalDivider(color = KarColors.Border, modifier = Modifier.padding(vertical = 10.dp))
+                ToggleRow("Dark theme", "Easier on the eyes in the evening (Ctrl + D)", com.kargroup.planner.ui.theme.KarPalette.dark) { onToggleDark() }
+            }
+        }
+
         // ------------------------------------------------------------ working day
         item {
             Section("Working day", Icons.Outlined.Schedule) {

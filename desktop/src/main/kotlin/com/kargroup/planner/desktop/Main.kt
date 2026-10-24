@@ -43,7 +43,7 @@ import androidx.compose.ui.input.key.type
  * up at about 60% of the Windows default (the shared theme itself draws text at 75%).
  */
 internal const val DESKTOP_UI_SCALE = 0.90f
-internal const val DESKTOP_FONT_SCALE = 0.60f / (0.75f * DESKTOP_UI_SCALE)
+internal val DESKTOP_FONT_SCALE: Float get() = DisplayPrefs.fontScale
 
 /** Ctrl + key → command. */
 private fun shortcut(e: KeyEvent): DesktopCommand? {
@@ -51,6 +51,9 @@ private fun shortcut(e: KeyEvent): DesktopCommand? {
     if (e.key == Key.F1) return DesktopCommand.Shortcuts
     if (!e.isCtrlPressed) return null
     return when (e.key) {
+        Key.Equals, Key.Plus, Key.NumPadAdd -> DesktopCommand.TextBigger
+        Key.Minus, Key.NumPadSubtract -> DesktopCommand.TextSmaller
+        Key.Zero, Key.NumPad0 -> DesktopCommand.TextReset
         Key.K -> DesktopCommand.OpenPalette
         Key.N -> DesktopCommand.NewActivity
         Key.M -> DesktopCommand.NewMeeting
@@ -78,6 +81,7 @@ fun main(args: Array<String>) {
     // Flatter, more corporate surfaces on the PC; remembered light / dark theme.
     KarPalette.depth = 0.35f
     KarPalette.dark = desktop.uiPrefs.getBoolean("dark", false)
+    DisplayPrefs.load(desktop)
     desktop.emails.startAutomation()
     Runtime.getRuntime().addShutdownHook(Thread { runCatching { desktop.database.saveNow() } })
 

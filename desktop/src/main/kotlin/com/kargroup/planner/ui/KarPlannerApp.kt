@@ -396,6 +396,9 @@ fun KarPlannerApp(vm: MainViewModel, app: DesktopApp, openRemindersSignal: Int =
                         onOpenDataFolder = { vm.openDataFolder() },
                         onExport = startExport,
                         onImport = startImport,
+                        textSize = com.kargroup.planner.desktop.DisplayPrefs.textSize,
+                        onTextSize = { com.kargroup.planner.desktop.DisplayPrefs.set(app, it) },
+                        onToggleDark = { vm.command(DesktopCommand.ToggleDark) },
                         onStartWithWindows = { on ->
                             val ok = OutlookMailer.setStartWithWindows(on)
                             if (ok || !on) app.emails.store.updateSettings { it.copy(startWithWindows = on) }
@@ -772,6 +775,9 @@ fun KarPlannerApp(vm: MainViewModel, app: DesktopApp, openRemindersSignal: Int =
                     vm.navigate(Screen.Emails)
                     vm.toast("$n e-mail(s) ready to review")
                 }
+                DesktopCommand.TextBigger -> { com.kargroup.planner.desktop.DisplayPrefs.bigger(app); vm.toast("Text size ${Math.round(com.kargroup.planner.desktop.DisplayPrefs.textSize * 100)}%") }
+                DesktopCommand.TextSmaller -> { com.kargroup.planner.desktop.DisplayPrefs.smaller(app); vm.toast("Text size ${Math.round(com.kargroup.planner.desktop.DisplayPrefs.textSize * 100)}%") }
+                DesktopCommand.TextReset -> { com.kargroup.planner.desktop.DisplayPrefs.reset(app); vm.toast("Text size reset") }
                 is DesktopCommand.Go -> vm.navigate(c.screen)
                 is DesktopCommand.OpenTask -> taskDialog = TaskDialogRequest(existing = c.task)
                 is DesktopCommand.OpenMeeting -> meetingEditor = MeetingEditorRequest(c.meeting)

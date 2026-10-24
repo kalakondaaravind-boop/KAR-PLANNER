@@ -76,6 +76,9 @@ sealed interface DesktopCommand {
     data object Export : DesktopCommand
     data object Import : DesktopCommand
     data object PrepareEmails : DesktopCommand
+    data object TextBigger : DesktopCommand
+    data object TextSmaller : DesktopCommand
+    data object TextReset : DesktopCommand
     data class Go(val screen: Screen) : DesktopCommand
     data class OpenTask(val task: TaskEntity) : DesktopCommand
     data class OpenMeeting(val meeting: MeetingMinuteEntity) : DesktopCommand
@@ -99,6 +102,8 @@ val DesktopShortcuts = listOf(
     "Ctrl + E" to "Outlook e-mails",
     "Ctrl + D" to "Light / dark theme",
     "Ctrl + R" to "Reminders",
+    "Ctrl + +  /  Ctrl + −" to "Bigger / smaller text",
+    "Ctrl + 0" to "Normal text size",
     "Ctrl + 1" to "Dashboard",
     "Ctrl + 2" to "Scheduler",
     "Ctrl + 3" to "Board",
@@ -160,6 +165,8 @@ fun CommandBar(
             PaletteItem("Export backup", "", Icons.Outlined.ArrowForward, DesktopCommand.Export),
             PaletteItem("Import backup", "", Icons.Outlined.ArrowForward, DesktopCommand.Import),
             PaletteItem("Keyboard shortcuts", "F1", Icons.Outlined.Keyboard, DesktopCommand.Shortcuts),
+            PaletteItem("Bigger text", "Ctrl +", Icons.Outlined.ArrowForward, DesktopCommand.TextBigger),
+            PaletteItem("Smaller text", "Ctrl −", Icons.Outlined.ArrowForward, DesktopCommand.TextSmaller),
         ) + GoTargets.map { (label, s, key) -> PaletteItem("Go to $label", key, Icons.Outlined.ArrowForward, DesktopCommand.Go(s)) } +
             templates.map { PaletteItem("New from template: ${it.name}", "Template", Icons.Outlined.ContentCopy, DesktopCommand.UseTemplate(it)) } +
             meetingTemplates.map { PaletteItem("New meeting from template: ${it.name}", "Template", Icons.Outlined.ContentCopy, DesktopCommand.UseMeetingTemplate(it)) }
