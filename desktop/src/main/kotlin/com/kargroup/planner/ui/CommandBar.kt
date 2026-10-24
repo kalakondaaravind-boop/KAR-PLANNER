@@ -122,6 +122,7 @@ private val GoTargets = listOf(
     Triple("Scheduler", Screen.Schedule, "Ctrl+2"),
     Triple("Board", Screen.Board, "Ctrl+3"),
     Triple("Table", Screen.Table, "Ctrl+4"),
+    Triple("Special projects (Gantt)", Screen.Tracker, "Ctrl+T"),
     Triple("Today", Screen.Today, "Ctrl+5"),
     Triple("By person", Screen.People, "Ctrl+6"),
     Triple("Minutes of meeting", Screen.Meetings, "Ctrl+7"),

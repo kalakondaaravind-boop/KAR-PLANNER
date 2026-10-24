@@ -370,6 +370,6 @@ fun buildSections(
         }
         Screen.Projects, Screen.Meetings, Screen.Schedule, Screen.Journal, Screen.People,
         Screen.Reports, Screen.Search, Screen.Settings, Screen.Emails,
-        Screen.Dashboard, Screen.Board, Screen.Table, Screen.Templates -> emptyList()
+        Screen.Dashboard, Screen.Board, Screen.Table, Screen.Templates, Screen.Tracker -> emptyList()
     }
 }

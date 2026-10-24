@@ -778,6 +778,7 @@ fun screenTitle(screen: Screen, projects: Map<String, ProjectEntity>, contexts: 
     Screen.Board -> "Board"
     Screen.Table -> "Table"
     Screen.Templates -> "Templates"
+    Screen.Tracker -> "Special Projects"
     is Screen.Person -> screen.name ?: "Unassigned"
 }
 

@@ -33,6 +33,7 @@ class DesktopApp {
     val emails = EmailCenter(this)
     val tags = TagStore()
     val templates = TemplateStore()
+    val plans = ProjectPlanStore()
     val uiPrefs: SharedPreferences = DesktopContext.getSharedPreferences("kar_desktop", Context.MODE_PRIVATE)
 }
 

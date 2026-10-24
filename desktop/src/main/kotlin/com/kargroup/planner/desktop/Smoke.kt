@@ -98,6 +98,35 @@ fun main(args: Array<String>) {
         all.firstOrNull { it.text.startsWith("VENDOR CONTRACT") }?.let { app.tags.add(listOf(it.id), "CLIENT") }
         all.firstOrNull { it.text.startsWith("SHARE REVISED") }?.let { app.tags.add(listOf(it.id), "FINANCE") }
     }
+    // Special project sample (Gantt planner)
+    val plan = SpecialProject(name = "MINIMUM WAGES REVISION", lead = "PRIYA SHARMA", health = ProjectHealth.AT_RISK,
+        objective = "Implement the revised minimum wages notification across all units by the statutory date.",
+        start = d(-20), targetEnd = d(40), color = "#7C3AED")
+    app.plans.saveProject(plan)
+    app.plans.saveProject(SpecialProject(name = "PLANT ERP ROLLOUT", lead = "RAHUL MEHTA", start = d(-5), targetEnd = d(70), color = "#0EA5E9"))
+    run {
+        val s = app.settings.current
+        fun t(title: String, parent: PlanTask?, o: Double, st: Long, days: Int, pct: Int, res: String, pr: String = PlanPriority.NORMAL,
+              ms: Boolean = false, pred: List<PlanTask> = emptyList()): PlanTask {
+            val a = PlanCalc.nextWorking(today.plusDays(st), s)
+            return PlanTask(projectId = plan.id, parentId = parent?.id, order = o, title = title, start = a.toString(),
+                finish = (if (ms) a else PlanCalc.finishFor(a, days, s)).toString(), percent = pct, resource = res, priority = pr, milestone = ms,
+                predecessors = pred.map { Dependency(it.id) }, workHours = if (ms) null else days * 4.0)
+        }
+        val p1 = t("ASSESSMENT", null, 1.0, -20, 10, 0, "")
+        val a1 = t("COLLECT NOTIFICATION & RATES", p1, 1.0, -20, 4, 100, "ANITA RAO")
+        val a2 = t("GAP ANALYSIS BY UNIT", p1, 2.0, -14, 6, 100, "PRIYA SHARMA", PlanPriority.HIGH, pred = listOf(a1))
+        val p2 = t("IMPLEMENTATION", null, 2.0, -6, 20, 0, "")
+        val b1 = t("PAYROLL MASTER UPDATE", p2, 1.0, -6, 5, 60, "VIKRAM IYER", PlanPriority.CRITICAL, pred = listOf(a2))
+        val b2 = t("ARREARS CALCULATION", p2, 2.0, -3, 4, 20, "VIKRAM IYER", PlanPriority.HIGH)
+        val b3 = t("CONTRACTOR COMPLIANCE CHECK", p2, 3.0, 2, 8, 0, "RAHUL MEHTA")
+        val b4 = t("REVISED WAGES EFFECTIVE", p2, 4.0, 14, 1, 0, "PRIYA SHARMA", PlanPriority.CRITICAL, ms = true, pred = listOf(b1, b2))
+        val p3 = t("CLOSURE", null, 3.0, 16, 10, 0, "")
+        val c1 = t("STATUTORY RETURNS & REGISTERS", p3, 1.0, 16, 6, 0, "ANITA RAO", pred = listOf(b4))
+        val c2 = t("SIGN-OFF", p3, 2.0, 26, 1, 0, "PRIYA SHARMA", ms = true, pred = listOf(c1))
+        val all = listOf(p1, a1, a2, p2, b1, b2, b3, b4, p3, c1, c2)
+        app.plans.saveTasks(PlanCalc.baseline(all).map { if (it.id == b2.id) it.copy(start = PlanCalc.nextWorking(today.minusDays(1), s).toString(), finish = PlanCalc.finishFor(today.minusDays(1), 6, s).toString()) else if (it.id == a2.id) it.copy(percent = 80) else it })
+    }
     var vm: MainViewModel? = null
     SwingUtilities.invokeAndWait { vm = MainViewModel(app).also { it.reminderPopupShown = true } }
     Thread.sleep(1500)
@@ -115,7 +144,18 @@ fun main(args: Array<String>) {
         "screen-9-templates" to Screen.Templates,
         "screen-10-dashboard-dark" to Screen.Dashboard,
         "screen-11-board-dark" to Screen.Board,
+        "screen-12-special-portfolio" to Screen.Tracker,
+        "screen-13-special-gantt" to Screen.Tracker,
+        "screen-14-special-overview" to Screen.Tracker,
+        "screen-15-special-sheet" to Screen.Tracker,
+        "screen-16-special-workload" to Screen.Tracker,
+        "screen-17-special-gantt-dark" to Screen.Tracker,
     ).forEach { (name, screen) ->
+        val pid = app.plans.projects.value.firstOrNull { it.name.startsWith("MINIMUM") }?.id
+        com.kargroup.planner.ui.PlanScreenState.projectId = if (name.contains("portfolio")) null else pid
+        com.kargroup.planner.ui.PlanScreenState.tab = when {
+            name.contains("overview") -> "OVERVIEW"; name.contains("sheet") -> "SHEET"; name.contains("workload") -> "WORKLOAD"; else -> "GANTT"
+        }
         com.kargroup.planner.ui.theme.KarPalette.dark = name.endsWith("-dark")
         SwingUtilities.invokeAndWait { vm!!.navigate(screen) }
         Thread.sleep(500)

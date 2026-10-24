@@ -59,6 +59,7 @@ private fun shortcut(e: KeyEvent): DesktopCommand? {
         Key.M -> DesktopCommand.NewMeeting
         Key.F -> DesktopCommand.Go(Screen.Search)
         Key.E -> DesktopCommand.Go(Screen.Emails)
+        Key.T -> DesktopCommand.Go(Screen.Tracker)
         Key.D -> DesktopCommand.ToggleDark
         Key.R -> DesktopCommand.Reminders
         Key.One -> DesktopCommand.Go(Screen.Dashboard)

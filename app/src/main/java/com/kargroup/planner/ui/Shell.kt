@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.SpaceDashboard
 import androidx.compose.material.icons.outlined.ViewKanban
 import androidx.compose.material.icons.outlined.TableRows
+import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Settings
@@ -336,6 +337,7 @@ internal fun Sidebar(
         if (emailCount != null) {
             NavItem("Board", Icons.Outlined.ViewKanban, screen == Screen.Board, null) { onNavigate(Screen.Board) }
             NavItem("Table", Icons.Outlined.TableRows, screen == Screen.Table, null) { onNavigate(Screen.Table) }
+            NavItem("Special Projects", Icons.Outlined.Timeline, screen == Screen.Tracker, null) { onNavigate(Screen.Tracker) }
         }
         NavItem("Today", Icons.Outlined.Today, screen == Screen.Today, counts.today) { onNavigate(Screen.Today) }
         NavItem("Inbox", Icons.Outlined.Inbox, screen == Screen.Inbox, counts.inbox) { onNavigate(Screen.Inbox) }
@@ -525,6 +527,7 @@ internal fun NavRail(
         if (emailCount != null) {
             RailItem("Board", Icons.Outlined.ViewKanban, screen == Screen.Board) { onNavigate(Screen.Board) }
             RailItem("Table", Icons.Outlined.TableRows, screen == Screen.Table) { onNavigate(Screen.Table) }
+            RailItem("Projects+", Icons.Outlined.Timeline, screen == Screen.Tracker) { onNavigate(Screen.Tracker) }
         }
         RailItem("Today", Icons.Outlined.Today, screen == Screen.Today) { onNavigate(Screen.Today) }
         RailItem("Inbox", Icons.Outlined.Inbox, screen == Screen.Inbox) { onNavigate(Screen.Inbox) }
