@@ -192,6 +192,15 @@ fun KarPlannerApp(vm: MainViewModel, app: DesktopApp, openRemindersSignal: Int =
     var deleteProjectRequest by remember { mutableStateOf<ProjectEntity?>(null) }
     var deleteContextRequest by remember { mutableStateOf<ContextTagEntity?>(null) }
     var rescheduleRequest by remember { mutableStateOf<TaskEntity?>(null) }
+    var showPalette by remember { mutableStateOf(false) }
+    var showShortcuts by remember { mutableStateOf(false) }
+    val tagDefs by app.tags.tags.collectAsState()
+    val tagMap by app.tags.assigned.collectAsState()
+    val activityTemplates by app.templates.activities.collectAsState()
+    val meetingTemplates by app.templates.meetings.collectAsState()
+    val tagsOf: (String) -> Set<String> = { id -> tagMap[id] ?: emptySet() }
+    val tagColor: (String) -> String = { n -> tagDefs.firstOrNull { it.name.equals(n, true) }?.color ?: "#64748B" }
+    LaunchedEffect(tasks) { if (tasks.isNotEmpty()) app.tags.prune(tasks.map { it.id }.toSet()) }
 
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
@@ -278,11 +287,14 @@ fun KarPlannerApp(vm: MainViewModel, app: DesktopApp, openRemindersSignal: Int =
                     onMenu = onMenu,
                     onAdd = openAddActivity,
                     onSearch = { vm.navigate(Screen.Search) },
+                    onCommand = { showPalette = true },
+                    onToggleDark = { vm.command(DesktopCommand.ToggleDark) },
                 )
             },
             floatingActionButton = {
                 if (!wide && screen != Screen.Meetings && screen != Screen.Projects && screen != Screen.Journal && screen != Screen.People &&
-                    screen != Screen.Reports && screen != Screen.Search && screen != Screen.Settings && screen != Screen.Emails
+                    screen != Screen.Reports && screen != Screen.Search && screen != Screen.Settings && screen != Screen.Emails &&
+                    screen != Screen.Dashboard && screen != Screen.Board && screen != Screen.Table && screen != Screen.Templates
                 ) {
                     ExtendedFloatingActionButton(
                         onClick = openAddActivity,
@@ -389,6 +401,81 @@ fun KarPlannerApp(vm: MainViewModel, app: DesktopApp, openRemindersSignal: Int =
                             if (ok || !on) app.emails.store.updateSettings { it.copy(startWithWindows = on) }
                             vm.toast(if (ok) (if (on) "KAR Planner will start with Windows" else "Removed from Windows start-up") else "Could not change the Windows start-up setting")
                         },
+                    )
+                    Screen.Dashboard -> DashboardScreen(
+                        tasks = tasks,
+                        meetings = meetings,
+                        persons = persons,
+                        projects = projects,
+                        settings = settings,
+                        manual = scheduleManual,
+                        myName = emailSettings.myName,
+                        emailsWaiting = emailQueue.size,
+                        today = today,
+                        onNewActivity = openAddActivity,
+                        onNewMeeting = { meetingEditor = MeetingEditorRequest(null) },
+                        onOpenEmails = { vm.navigate(Screen.Emails) },
+                        onOpenTask = { taskDialog = TaskDialogRequest(existing = it) },
+                        onOpenMeeting = { meetingEditor = MeetingEditorRequest(it) },
+                        onNavigate = { vm.navigate(it) },
+                        onReschedule = { rescheduleRequest = it },
+                    )
+                    Screen.Board -> BoardScreen(
+                        tasks = tasks,
+                        persons = persons,
+                        projects = projects,
+                        tags = tagDefs,
+                        tagsOf = tagsOf,
+                        tagColor = tagColor,
+                        today = today,
+                        onOpen = { taskDialog = TaskDialogRequest(existing = it) },
+                        onMove = { task, status ->
+                            if (status == TaskStatus.COMPLETED) askCompletion(task) else vm.setStatus(task, status)
+                        },
+                        onAdd = openAddActivity,
+                    )
+                    Screen.Table -> TableScreen(
+                        tasks = tasks,
+                        persons = persons,
+                        projects = projects,
+                        tags = tagDefs,
+                        tagsOf = tagsOf,
+                        tagColor = tagColor,
+                        today = today,
+                        onOpen = { taskDialog = TaskDialogRequest(existing = it) },
+                        bulk = BulkActions(
+                            assign = { ids, p -> vm.bulkAssign(ids, p) },
+                            status = { ids, st -> vm.bulkStatus(ids, st) },
+                            priority = { ids, p -> vm.bulkPriority(ids, p) },
+                            currentStatus = { ids, t -> vm.bulkCurrentStatus(ids, t) },
+                            reschedule = { ids, d, r -> vm.bulkReschedule(ids, d, r) },
+                            complete = { ids, r -> vm.bulkComplete(ids, r) },
+                            delete = { ids -> vm.bulkDelete(ids) },
+                            addTag = { ids, t -> app.tags.add(ids, t); vm.toast("Tag $t added to ${ids.size}") },
+                            removeTag = { ids, t -> app.tags.remove(ids, t); vm.toast("Tag $t removed") },
+                            exportCsv = { list ->
+                                FileDialogs.save("Export this view for Excel", "KAR-Planner-activities-${Ist.todayStr()}.csv")?.let { f ->
+                                    runCatching { f.writeText(com.kargroup.planner.desktop.TableCsv.csv(list, projects, tagsOf), Charsets.UTF_8) }
+                                        .onSuccess { vm.toast("Exported ${list.size} activities") }
+                                        .onFailure { vm.toast("Export failed: ${it.message}") }
+                                }
+                            },
+                        ),
+                    )
+                    Screen.Templates -> TemplatesScreen(
+                        activities = activityTemplates,
+                        meetings = meetingTemplates,
+                        tags = tagDefs,
+                        tagUsage = { n -> tagMap.values.count { set -> set.any { it.equals(n, true) } } },
+                        persons = persons,
+                        onUseActivity = { vm.command(DesktopCommand.UseTemplate(it)) },
+                        onUseMeeting = { vm.command(DesktopCommand.UseMeetingTemplate(it)) },
+                        onSaveActivity = { app.templates.saveActivity(it); vm.toast("Template saved") },
+                        onDeleteActivity = { app.templates.deleteActivity(it.id); vm.toast("Template deleted") },
+                        onSaveMeeting = { app.templates.saveMeeting(it); vm.toast("Template saved") },
+                        onDeleteMeeting = { app.templates.deleteMeeting(it.id); vm.toast("Template deleted") },
+                        onSaveTag = { t, old -> app.tags.saveTag(t, old) },
+                        onDeleteTag = { app.tags.deleteTag(it.name) },
                     )
                     Screen.Emails -> EmailCenterScreen(
                         center = app.emails,
@@ -664,6 +751,51 @@ fun KarPlannerApp(vm: MainViewModel, app: DesktopApp, openRemindersSignal: Int =
             onReschedule = { rescheduleRequest = it },
         )
     }
+
+    // ------------------------------------------------- shortcuts & command bar
+    LaunchedEffect(Unit) {
+        vm.commands.collect { c ->
+            when (c) {
+                DesktopCommand.NewActivity -> openAddActivity()
+                DesktopCommand.NewMeeting -> meetingEditor = MeetingEditorRequest(null)
+                DesktopCommand.OpenPalette -> showPalette = true
+                DesktopCommand.Shortcuts -> showShortcuts = true
+                DesktopCommand.Reminders -> showReminders = true
+                DesktopCommand.Export -> startExport()
+                DesktopCommand.Import -> startImport()
+                DesktopCommand.ToggleDark -> {
+                    com.kargroup.planner.ui.theme.KarPalette.dark = !com.kargroup.planner.ui.theme.KarPalette.dark
+                    app.uiPrefs.edit().putBoolean("dark", com.kargroup.planner.ui.theme.KarPalette.dark).apply()
+                }
+                DesktopCommand.PrepareEmails -> {
+                    val n = app.emails.prepareDigest() + app.emails.prepareReminders()
+                    vm.navigate(Screen.Emails)
+                    vm.toast("$n e-mail(s) ready to review")
+                }
+                is DesktopCommand.Go -> vm.navigate(c.screen)
+                is DesktopCommand.OpenTask -> taskDialog = TaskDialogRequest(existing = c.task)
+                is DesktopCommand.OpenMeeting -> meetingEditor = MeetingEditorRequest(c.meeting)
+                is DesktopCommand.UseTemplate -> {
+                    val created = vm.createFromTemplate(c.template)
+                    taskDialog = TaskDialogRequest(existing = created)
+                }
+                is DesktopCommand.UseMeetingTemplate -> meetingEditor = MeetingEditorRequest(vm.meetingFromTemplate(c.template))
+            }
+        }
+    }
+
+    if (showPalette) {
+        CommandBar(
+            tasks = tasks,
+            meetings = meetings,
+            persons = persons,
+            templates = activityTemplates,
+            meetingTemplates = meetingTemplates,
+            onCommand = { vm.command(it) },
+            onDismiss = { showPalette = false },
+        )
+    }
+    if (showShortcuts) ShortcutsDialog { showShortcuts = false }
 
     if (showDeleteAll) {
         DeleteAllDialog(

@@ -229,7 +229,7 @@ fun TaskListScreen(
                 item(key = "sec-${section.key}") { SectionHeader(section) }
             }
             items(section.rows, key = { "${section.key}-${it.task.id}" }) { row ->
-                Column(Modifier.animateItem().background(Color.White)) {
+                Column(Modifier.animateItem().background(KarColors.Card)) {
                     TaskRow(
                         row = row,
                         project = row.task.projectId?.let { projects[it] },
@@ -301,7 +301,7 @@ private fun SectionHeader(section: TaskSection) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(KarColors.Card)
             .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -328,7 +328,7 @@ private fun EmptyState(onAdd: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(KarColors.Card)
             .padding(vertical = 40.dp, horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -403,7 +403,7 @@ fun TaskRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .background(if (isDrillRoot) KarColors.GoldTint else Color.White)
+            .background(if (isDrillRoot) KarColors.GoldTint else KarColors.Card)
             .drawBehind {
                 if (stripe != null) {
                     drawRect(

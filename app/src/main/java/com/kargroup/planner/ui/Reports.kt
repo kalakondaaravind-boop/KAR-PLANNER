@@ -357,7 +357,7 @@ fun ReportsScreen(
 
 @Composable
 private fun HeaderButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Surface(onClick = onClick, color = Color.White, shape = RoundedCornerShape(10.dp)) {
+    Surface(onClick = onClick, color = KarColors.Card, shape = RoundedCornerShape(10.dp)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = KarColors.SkyDeep, modifier = Modifier.padding(end = 6.dp))
             Text(label, color = KarColors.SkyDeep, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)

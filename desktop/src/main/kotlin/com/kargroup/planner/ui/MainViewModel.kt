@@ -53,7 +53,11 @@ class MainViewModel(private val karApp: DesktopApp) {
     val journal: StateFlow<List<JournalEntry>> =
         repo.journal.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val screen = MutableStateFlow<Screen>(Screen.Schedule)
+    val screen = MutableStateFlow<Screen>(Screen.Dashboard)
+
+    /** Requests from keyboard shortcuts / the command bar, handled by the main screen. */
+    val commands = kotlinx.coroutines.flow.MutableSharedFlow<DesktopCommand>(extraBufferCapacity = 8)
+    fun command(c: DesktopCommand) { commands.tryEmit(c) }
 
     /** Working hours, holidays, reminders, backup and lock preferences. */
     val settings: StateFlow<PlannerSettings> = karApp.settings.state
@@ -431,6 +435,85 @@ class MainViewModel(private val karApp: DesktopApp) {
         navigate(Screen.Today)
         toast("All data deleted. Fresh start!")
     }
+
+    // ------------------------------------------------------------- bulk edit
+
+    private fun byIds(ids: Collection<String>): List<TaskEntity> { val set = ids.toSet(); return tasks.value.filter { it.id in set } }
+
+    fun bulkAssign(ids: Collection<String>, person: String?) = viewModelScope.launch {
+        val list = byIds(ids)
+        list.forEach { repo.saveTask(it.copy(assignee = person?.trim()?.ifBlank { null })) }
+        toast("${list.size} activit${if (list.size == 1) "y" else "ies"} assigned to ${person ?: "nobody"}")
+    }
+
+    fun bulkPriority(ids: Collection<String>, priority: String?) = viewModelScope.launch {
+        val list = byIds(ids)
+        list.forEach { repo.saveTask(it.copy(priority = priority)) }
+        toast("Priority updated for ${list.size}")
+    }
+
+    fun bulkStatus(ids: Collection<String>, status: String) = viewModelScope.launch {
+        val list = byIds(ids).filter { !it.done }
+        list.forEach { repo.setStatus(it.id, status) }
+        toast("Status set to ${TaskStatus.label(status)} for ${list.size}")
+    }
+
+    fun bulkCurrentStatus(ids: Collection<String>, text: String) = viewModelScope.launch {
+        val list = byIds(ids)
+        list.forEach { repo.saveTask(it.copy(statusNote = text.trim().ifBlank { null })) }
+        toast("Current status updated for ${list.size}")
+    }
+
+    fun bulkReschedule(ids: Collection<String>, date: String, reason: String) = viewModelScope.launch {
+        val list = byIds(ids).filter { !it.done }
+        list.forEach { repo.reschedule(it.id, date, it.dueTime, reason) }
+        toast("${list.size} moved to ${Ist.friendly(date)}")
+    }
+
+    fun bulkComplete(ids: Collection<String>, remarks: String) = viewModelScope.launch {
+        val list = byIds(ids).filter { !it.done }
+        list.forEach { repo.completeWithRemarks(it.id, remarks, includeSubtasks = true) }
+        toast("${list.size} completed")
+    }
+
+    fun bulkDelete(ids: Collection<String>) = viewModelScope.launch {
+        val list = byIds(ids)
+        list.forEach { repo.deleteTask(it.id) }
+        toast("${list.size} deleted")
+    }
+
+    // -------------------------------------------------------------- templates
+
+    /** Creates an activity (and its subtasks) from a template; returns it so it can be opened for editing. */
+    suspend fun createFromTemplate(t: com.kargroup.planner.desktop.ActivityTemplate): TaskEntity {
+        val base = System.currentTimeMillis()
+        val task = TaskEntity(
+            text = t.title.uppercase(),
+            notes = t.notes.ifBlank { null },
+            priority = t.priority,
+            estimatedMinutes = t.estimatedMinutes,
+            assignee = t.assignee.ifBlank { null },
+            projectId = t.projectId,
+            dueDate = t.dueInDays?.let { Ist.today().plusDays(it.toLong()).toString() },
+            createdAt = base,
+        )
+        repo.saveTask(task)
+        t.subtasks.forEachIndexed { i, (text, who) ->
+            repo.saveTask(TaskEntity(text = text.uppercase(), assignee = who.ifBlank { task.assignee }, parentId = task.id, projectId = task.projectId, createdAt = base + 1 + i))
+        }
+        toast("Created from template \"${t.name}\"")
+        return task
+    }
+
+    fun meetingFromTemplate(t: com.kargroup.planner.desktop.MomTemplate): MeetingMinuteEntity = MeetingMinuteEntity(
+        title = t.title,
+        meetingDate = Ist.todayStr(),
+        meetingTime = t.meetingTime,
+        durationMinutes = t.durationMinutes,
+        attendees = t.attendees,
+        agenda = t.agenda,
+        projectId = t.projectId,
+    )
 
     companion object {
         private const val KEY_SCHEDULE_MANUAL = "schedule_manual"

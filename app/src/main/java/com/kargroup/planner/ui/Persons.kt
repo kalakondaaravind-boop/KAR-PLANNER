@@ -158,7 +158,7 @@ fun PersonDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = KarColors.Card,
         icon = { Icon(Icons.Outlined.PersonAdd, null, tint = KarColors.SkyDeep) },
         title = { Text(if (existing == null) "Add Person" else "Edit Person", color = KarColors.Navy) },
         text = {

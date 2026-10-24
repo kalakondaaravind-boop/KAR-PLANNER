@@ -122,7 +122,7 @@ fun RemindersDialog(
 ) {
     AlertDialog(
         onDismissRequest = onClose,
-        containerColor = Color.White,
+        containerColor = KarColors.Card,
         icon = { Icon(Icons.Outlined.NotificationsActive, null, tint = KarColors.Gold) },
         title = { Text("Reminders", color = KarColors.Navy) },
         text = {
@@ -203,7 +203,7 @@ fun DeleteAllDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = KarColors.Card,
         icon = { Icon(Icons.Outlined.WarningAmber, null, tint = KarColors.Red, modifier = Modifier.size(36.dp)) },
         title = { Text("Danger Zone: Delete All Data", color = KarColors.Red, fontWeight = FontWeight.Bold) },
         text = {
@@ -213,7 +213,7 @@ fun DeleteAllDialog(
                     color = KarColors.Ink,
                 )
                 Spacer(Modifier.size(12.dp))
-                Surface(color = Color(0xFFFEF2F2), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color(0xFFFECACA))) {
+                Surface(color = KarColors.Red.copy(alpha = 0.08f), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color(0xFFFECACA))) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         val c = counts
                         CountRow("Activities / tasks", c?.tasks)
@@ -273,7 +273,7 @@ fun ConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = KarColors.Card,
         title = { Text(title, color = KarColors.Navy) },
         text = { Text(message, color = KarColors.Ink) },
         confirmButton = {

@@ -91,6 +91,13 @@ fun main(args: Array<String>) {
     check(AppDirs.dataFile.length() > 100) { "Data file not written" }
 
     // Screenshots of the main screens (rendered off-screen).
+    com.kargroup.planner.ui.theme.KarPalette.depth = 0.35f
+    run {
+        val all = app.database.snapshot().tasks
+        all.firstOrNull { it.text.startsWith("SUBMIT Q3") }?.let { app.tags.add(listOf(it.id), "AUDIT") }
+        all.firstOrNull { it.text.startsWith("VENDOR CONTRACT") }?.let { app.tags.add(listOf(it.id), "CLIENT") }
+        all.firstOrNull { it.text.startsWith("SHARE REVISED") }?.let { app.tags.add(listOf(it.id), "FINANCE") }
+    }
     var vm: MainViewModel? = null
     SwingUtilities.invokeAndWait { vm = MainViewModel(app).also { it.reminderPopupShown = true } }
     Thread.sleep(1500)
@@ -102,11 +109,18 @@ fun main(args: Array<String>) {
         "screen-3-settings" to Screen.Settings,
         "screen-4-by-person" to Screen.Person("PRIYA SHARMA"),
         "screen-5-meetings" to Screen.Meetings,
+        "screen-6-dashboard" to Screen.Dashboard,
+        "screen-7-board" to Screen.Board,
+        "screen-8-table" to Screen.Table,
+        "screen-9-templates" to Screen.Templates,
+        "screen-10-dashboard-dark" to Screen.Dashboard,
+        "screen-11-board-dark" to Screen.Board,
     ).forEach { (name, screen) ->
+        com.kargroup.planner.ui.theme.KarPalette.dark = name.endsWith("-dark")
         SwingUtilities.invokeAndWait { vm!!.navigate(screen) }
         Thread.sleep(500)
-        val bytes = ImageComposeScene(w, h, Density(1f, DESKTOP_FONT_SCALE)) {
-            CompositionLocalProvider(LocalConfiguration provides Configuration(w, h)) {
+        val bytes = ImageComposeScene(w, h, Density(DESKTOP_UI_SCALE, DESKTOP_FONT_SCALE)) {
+            CompositionLocalProvider(LocalConfiguration provides Configuration((w / DESKTOP_UI_SCALE).toInt(), (h / DESKTOP_UI_SCALE).toInt())) {
                 KarTheme { KarPlannerApp(vm = vm!!, app = app) }
             }
         }.use { scene ->

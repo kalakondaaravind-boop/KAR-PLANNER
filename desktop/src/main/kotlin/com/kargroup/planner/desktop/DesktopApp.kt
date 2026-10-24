@@ -31,6 +31,9 @@ class DesktopApp {
     val appPrefs: SharedPreferences = DesktopContext.getSharedPreferences("kar_app", Context.MODE_PRIVATE)
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val emails = EmailCenter(this)
+    val tags = TagStore()
+    val templates = TemplateStore()
+    val uiPrefs: SharedPreferences = DesktopContext.getSharedPreferences("kar_desktop", Context.MODE_PRIVATE)
 }
 
 /**

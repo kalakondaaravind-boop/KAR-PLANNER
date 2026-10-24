@@ -267,7 +267,7 @@ fun SchedulerScreen(
 
         // ------------------------------------------------------- time allocation
         item(key = "sched-alloc") {
-            Column(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Column(Modifier.fillMaxWidth().background(KarColors.Card).padding(horizontal = 16.dp, vertical = 14.dp)) {
                 if (!working) {
                     FlowRow(
                         Modifier.fillMaxWidth(),
@@ -336,7 +336,7 @@ fun SchedulerScreen(
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .background(Color.White)
+                        .background(KarColors.Card)
                         .padding(vertical = 30.dp, horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -377,7 +377,7 @@ fun SchedulerScreen(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .background(if (work) Color.White else Color(0xFFF6F8FB))
+                        .background(if (work) KarColors.Card else KarColors.Tint)
                         .padding(start = 8.dp, end = 4.dp),
                 ) {
                     Column(Modifier.width(54.dp).padding(top = if (work) 10.dp else 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -477,7 +477,7 @@ fun SchedulerScreen(
         }
 
         item(key = "sched-bottom") {
-            Box(Modifier.fillMaxWidth().height(18.dp).background(Color.White, SheetBottomShape))
+            Box(Modifier.fillMaxWidth().height(18.dp).background(KarColors.Card, SheetBottomShape))
         }
     }
 
@@ -486,7 +486,7 @@ fun SchedulerScreen(
         val tState = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute - initial.minute % 5, is24Hour = true)
         AlertDialog(
             onDismissRequest = { pickTimeFor = null },
-            containerColor = Color.White,
+            containerColor = KarColors.Card,
             title = { Text("Fix start time · ${Ist.friendly(selectedDay)}") },
             text = {
                 Column {

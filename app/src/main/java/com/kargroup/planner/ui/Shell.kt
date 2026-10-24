@@ -5,6 +5,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +46,12 @@ import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.ViewList
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.SpaceDashboard
+import androidx.compose.material.icons.outlined.ViewKanban
+import androidx.compose.material.icons.outlined.TableRows
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
@@ -89,8 +97,18 @@ import kotlinx.coroutines.delay
 // =============================================================================
 
 @Composable
-internal fun TopBar(title: String, wide: Boolean, onMenu: (() -> Unit)?, onAdd: () -> Unit, onSearch: () -> Unit = {}) {
-    Column(Modifier.depthShadow(4.dp, RectangleShape).background(Color.White)) {
+internal fun TopBar(
+    title: String,
+    wide: Boolean,
+    onMenu: (() -> Unit)?,
+    onAdd: () -> Unit,
+    onSearch: () -> Unit = {},
+    /** Desktop: opens the command bar (Ctrl+K). */
+    onCommand: (() -> Unit)? = null,
+    /** Desktop: light / dark theme switch. */
+    onToggleDark: (() -> Unit)? = null,
+) {
+    Column(Modifier.depthShadow(4.dp, RectangleShape).background(KarColors.Card)) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -119,7 +137,32 @@ internal fun TopBar(title: String, wide: Boolean, onMenu: (() -> Unit)?, onAdd: 
                     maxLines = 1,
                 )
             }
-            IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, "Search", tint = KarColors.Navy) }
+            if (onCommand != null) {
+                Row(
+                    Modifier
+                        .padding(end = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(KarColors.SkyWash)
+                        .border(1.dp, KarColors.Border, RoundedCornerShape(8.dp))
+                        .clickable(onClick = onCommand)
+                        .padding(horizontal = 10.dp, vertical = 7.dp)
+                        .widthIn(min = 220.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.Search, null, tint = KarColors.Slate, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Search or jump to…", color = KarColors.Slate, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f, fill = false))
+                    Spacer(Modifier.width(16.dp))
+                    Text("Ctrl+K", color = KarColors.SlateLight, style = MaterialTheme.typography.labelSmall)
+                }
+            } else {
+                IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, "Search", tint = KarColors.Navy) }
+            }
+            if (onToggleDark != null) {
+                IconButton(onClick = onToggleDark) {
+                    Icon(if (com.kargroup.planner.ui.theme.KarPalette.dark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, "Theme", tint = KarColors.Navy)
+                }
+            }
             Spacer(Modifier.width(4.dp))
             IstClockBadge(showDate = true, compact = !wide)
             if (wide) {
@@ -286,7 +329,14 @@ internal fun Sidebar(
         GoldButton("New Activity", onNewActivity, Modifier.fillMaxWidth(), icon = Icons.Outlined.Add, height = 46.dp)
 
         NavLabel("Views")
+        if (emailCount != null) {
+            NavItem("Dashboard", Icons.Outlined.SpaceDashboard, screen == Screen.Dashboard, null) { onNavigate(Screen.Dashboard) }
+        }
         NavItem("Scheduler", Icons.Outlined.Schedule, screen == Screen.Schedule, counts.open) { onNavigate(Screen.Schedule) }
+        if (emailCount != null) {
+            NavItem("Board", Icons.Outlined.ViewKanban, screen == Screen.Board, null) { onNavigate(Screen.Board) }
+            NavItem("Table", Icons.Outlined.TableRows, screen == Screen.Table, null) { onNavigate(Screen.Table) }
+        }
         NavItem("Today", Icons.Outlined.Today, screen == Screen.Today, counts.today) { onNavigate(Screen.Today) }
         NavItem("Inbox", Icons.Outlined.Inbox, screen == Screen.Inbox, counts.inbox) { onNavigate(Screen.Inbox) }
         NavItem("Overdue", Icons.Outlined.ReportProblem, screen == Screen.Overdue, counts.overdue, KarColors.Red) { onNavigate(Screen.Overdue) }
@@ -307,6 +357,7 @@ internal fun Sidebar(
         NavLabel("Utilities")
         if (emailCount != null) {
             NavItem("Outlook E-mails", Icons.Outlined.Email, screen == Screen.Emails, emailCount.takeIf { it > 0 }, KarColors.Amber) { onNavigate(Screen.Emails) }
+            NavItem("Templates", Icons.Outlined.ContentCopy, screen == Screen.Templates, null) { onNavigate(Screen.Templates) }
         }
         NavItem("Search", Icons.Outlined.Search, screen == Screen.Search, null) { onNavigate(Screen.Search) }
         NavItem("Settings", Icons.Outlined.Settings, screen == Screen.Settings, null) { onNavigate(Screen.Settings) }
@@ -469,7 +520,12 @@ internal fun NavRail(
             Icon(Icons.Outlined.Add, "New Activity", tint = Color.White, modifier = Modifier.size(26.dp))
         }
         Spacer(Modifier.height(14.dp))
+        if (emailCount != null) RailItem("Home", Icons.Outlined.SpaceDashboard, screen == Screen.Dashboard) { onNavigate(Screen.Dashboard) }
         RailItem("Scheduler", Icons.Outlined.Schedule, screen == Screen.Schedule) { onNavigate(Screen.Schedule) }
+        if (emailCount != null) {
+            RailItem("Board", Icons.Outlined.ViewKanban, screen == Screen.Board) { onNavigate(Screen.Board) }
+            RailItem("Table", Icons.Outlined.TableRows, screen == Screen.Table) { onNavigate(Screen.Table) }
+        }
         RailItem("Today", Icons.Outlined.Today, screen == Screen.Today) { onNavigate(Screen.Today) }
         RailItem("Inbox", Icons.Outlined.Inbox, screen == Screen.Inbox) { onNavigate(Screen.Inbox) }
         RailItem("Overdue", Icons.Outlined.ReportProblem, screen == Screen.Overdue) { onNavigate(Screen.Overdue) }

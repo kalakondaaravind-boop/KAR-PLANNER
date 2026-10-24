@@ -212,7 +212,7 @@ fun EmptyCard(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Stri
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(16.dp))
+            .background(KarColors.Card, RoundedCornerShape(16.dp))
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -230,7 +230,7 @@ fun ProjectDialog(existing: ProjectEntity?, onDismiss: () -> Unit, onSave: (Proj
     var color by remember { mutableStateOf(existing?.color ?: "#1E3A6E") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = KarColors.Card,
         title = { Text(if (existing == null) "New Project" else "Edit Project", color = KarColors.Navy) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -264,7 +264,7 @@ fun ContextDialog(existing: ContextTagEntity?, onDismiss: () -> Unit, onSave: (C
     val cleanName = name.trim().let { if (it.startsWith("@")) it else "@$it" }.replace(" ", "-")
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = KarColors.Card,
         title = { Text(if (existing == null) "New Context" else "Edit Context", color = KarColors.Navy) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {

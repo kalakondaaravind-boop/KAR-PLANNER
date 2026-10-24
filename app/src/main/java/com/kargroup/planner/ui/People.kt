@@ -133,7 +133,7 @@ fun PeopleScreen(
                     )
                 }
                 Spacer(Modifier.width(10.dp))
-                Surface(onClick = onAdd, color = Color.White, shape = RoundedCornerShape(12.dp)) {
+                Surface(onClick = onAdd, color = KarColors.Card, shape = RoundedCornerShape(12.dp)) {
                     Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.PersonAdd, null, tint = KarColors.SkyDeep, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))

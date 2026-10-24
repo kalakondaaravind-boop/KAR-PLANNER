@@ -37,16 +37,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kargroup.planner.ui.theme.KarColors
+import com.kargroup.planner.ui.theme.KarPalette
 
 /** Brand gradients used to give surfaces a lit, three-dimensional feel. */
 object KarBrush {
-    val SkyHeader = Brush.linearGradient(listOf(Color(0xFF0284C7), Color(0xFF0EA5E9), Color(0xFF38BDF8)))
-    val Sidebar = Brush.verticalGradient(listOf(Color(0xFFF3F9FF), Color(0xFFE2F0FC)))
+    val SkyHeader: Brush get() = if (KarPalette.dark) Brush.linearGradient(listOf(Color(0xFF075985), Color(0xFF0369A1), Color(0xFF0284C7)))
+        else Brush.linearGradient(listOf(Color(0xFF0284C7), Color(0xFF0EA5E9), Color(0xFF38BDF8)))
+    val Sidebar: Brush get() = if (KarPalette.dark) Brush.verticalGradient(listOf(Color(0xFF111926), Color(0xFF0D1520)))
+        else Brush.verticalGradient(listOf(Color(0xFFF3F9FF), Color(0xFFE2F0FC)))
     val NavyVertical = Brush.verticalGradient(listOf(Color(0xFF1E3A6E), Color(0xFF0B1E3F)))
     val Gold = Brush.verticalGradient(listOf(Color(0xFF38BDF8), Color(0xFF0EA5E9), Color(0xFF0284C7)))
     val SelectedNav = Brush.horizontalGradient(listOf(Color(0xFF0EA5E9), Color(0xFF38BDF8)))
-    val Backdrop = Brush.verticalGradient(listOf(Color(0xFFF5FAFF), Color(0xFFE6F2FC)))
-    val CardSheen = Brush.verticalGradient(listOf(Color.White, Color(0xFFFCFDFE)))
+    val Backdrop: Brush get() = if (KarPalette.dark) Brush.verticalGradient(listOf(Color(0xFF0E141D), Color(0xFF0B1119)))
+        else Brush.verticalGradient(listOf(Color(0xFFF5FAFF), Color(0xFFE6F2FC)))
+    val CardSheen: Brush get() = if (KarPalette.dark) Brush.verticalGradient(listOf(Color(0xFF161E2B), Color(0xFF141B27)))
+        else Brush.verticalGradient(listOf(Color.White, Color(0xFFFCFDFE)))
     fun tile(color: Color) = Brush.linearGradient(listOf(color.copy(alpha = 0.95f), color.copy(alpha = 0.70f)))
 }
 
@@ -55,7 +60,7 @@ private val ShadowSpot = Color(0xFF0369A1).copy(alpha = 0.20f)
 
 /** Soft navy-tinted layered shadow. */
 fun Modifier.depthShadow(elevation: Dp, shape: Shape): Modifier =
-    this.shadow(elevation, shape, clip = false, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
+    this.shadow(elevation * KarPalette.depth, shape, clip = false, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
 
 /**
  * Spring-loaded press effect: the element sinks, scales down slightly and tilts

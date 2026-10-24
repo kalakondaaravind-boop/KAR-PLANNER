@@ -72,7 +72,7 @@ fun RescheduleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = KarColors.Card,
         icon = { Icon(Icons.Outlined.EventRepeat, null, tint = KarColors.SkyDeep) },
         title = { Text("Reschedule activity") },
         text = {
@@ -142,7 +142,7 @@ fun RescheduleDialog(
         val state = rememberTimePickerState(initialHour = parsed.hour, initialMinute = parsed.minute, is24Hour = false)
         AlertDialog(
             onDismissRequest = { pickTime = false },
-            containerColor = Color.White,
+            containerColor = KarColors.Card,
             title = { Text("Target time") },
             text = { TimePicker(state = state) },
             confirmButton = {

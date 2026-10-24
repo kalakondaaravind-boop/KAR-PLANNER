@@ -178,7 +178,7 @@ fun JournalScreen(
                         }
                     }
                     if (streak > 0) {
-                        Surface(color = Color.White, shape = RoundedCornerShape(12.dp)) {
+                        Surface(color = KarColors.Card, shape = RoundedCornerShape(12.dp)) {
                             Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.LocalFireDepartment, null, tint = KarColors.Amber, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(4.dp))
@@ -416,7 +416,7 @@ fun JournalScreen(
     confirmDelete?.let { e ->
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
-            containerColor = Color.White,
+            containerColor = KarColors.Card,
             title = { Text("Delete journal entry?") },
             text = { Text("The entry for ${Ist.formatFull(e.date)} will be permanently deleted.") },
             confirmButton = {

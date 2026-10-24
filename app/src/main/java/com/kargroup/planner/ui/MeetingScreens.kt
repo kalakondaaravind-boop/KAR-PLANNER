@@ -459,7 +459,7 @@ fun MeetingEditorDialog(
         val tState = rememberTimePickerState(initialHour = parsed.hour, initialMinute = parsed.minute, is24Hour = false)
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
-            containerColor = Color.White,
+            containerColor = KarColors.Card,
             title = { Text("Meeting time (IST)") },
             text = { TimePicker(state = tState) },
             confirmButton = {
@@ -475,7 +475,7 @@ fun MeetingEditorDialog(
     if (confirmDelete && existing != null) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            containerColor = Color.White,
+            containerColor = KarColors.Card,
             title = { Text("Delete this meeting?") },
             text = { Text("\"${existing.title}\" will be removed. Activities created from its action items stay in your planner.") },
             confirmButton = {

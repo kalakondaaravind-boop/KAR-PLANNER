@@ -183,7 +183,7 @@ fun SetPinDialog(onDismiss: () -> Unit, onSet: (String) -> Unit) {
     val match = p1 == p2
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = KarColors.Card,
         icon = { Icon(Icons.Outlined.Lock, null, tint = KarColors.SkyDeep) },
         title = { Text("Set PIN") },
         text = {

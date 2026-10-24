@@ -29,17 +29,55 @@ import com.kargroup.planner.ui.KarPlannerApp
 import com.kargroup.planner.ui.MainViewModel
 import com.kargroup.planner.ui.Screen
 import com.kargroup.planner.ui.theme.KarTheme
+import com.kargroup.planner.ui.theme.KarPalette
+import com.kargroup.planner.ui.DesktopCommand
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 
 /**
- * The shared theme draws text at 75% of the system size (tuned for the tablet). On a PC that
- * is too small, so the desktop scales fonts back up to about 95% of the Windows size.
+ * Desktop sizing: the whole layout is drawn at 90% (denser, like Outlook / Excel) and text ends
+ * up at about 80% of the Windows default (the shared theme itself draws text at 75%).
  */
-internal const val DESKTOP_FONT_SCALE = 0.95f / 0.75f
+internal const val DESKTOP_UI_SCALE = 0.90f
+internal const val DESKTOP_FONT_SCALE = 0.80f / (0.75f * DESKTOP_UI_SCALE)
+
+/** Ctrl + key → command. */
+private fun shortcut(e: KeyEvent): DesktopCommand? {
+    if (e.type != KeyEventType.KeyDown) return null
+    if (e.key == Key.F1) return DesktopCommand.Shortcuts
+    if (!e.isCtrlPressed) return null
+    return when (e.key) {
+        Key.K -> DesktopCommand.OpenPalette
+        Key.N -> DesktopCommand.NewActivity
+        Key.M -> DesktopCommand.NewMeeting
+        Key.F -> DesktopCommand.Go(Screen.Search)
+        Key.E -> DesktopCommand.Go(Screen.Emails)
+        Key.D -> DesktopCommand.ToggleDark
+        Key.R -> DesktopCommand.Reminders
+        Key.One -> DesktopCommand.Go(Screen.Dashboard)
+        Key.Two -> DesktopCommand.Go(Screen.Schedule)
+        Key.Three -> DesktopCommand.Go(Screen.Board)
+        Key.Four -> DesktopCommand.Go(Screen.Table)
+        Key.Five -> DesktopCommand.Go(Screen.Today)
+        Key.Six -> DesktopCommand.Go(Screen.People)
+        Key.Seven -> DesktopCommand.Go(Screen.Meetings)
+        Key.Eight -> DesktopCommand.Go(Screen.Reports)
+        Key.Nine -> DesktopCommand.Go(Screen.Settings)
+        else -> null
+    }
+}
 
 @Suppress("DEPRECATION")
 fun main(args: Array<String>) {
     val startHidden = args.any { it.equals("--minimized", ignoreCase = true) }
     val desktop = DesktopApp()
+    // Flatter, more corporate surfaces on the PC; remembered light / dark theme.
+    KarPalette.depth = 0.35f
+    KarPalette.dark = desktop.uiPrefs.getBoolean("dark", false)
     desktop.emails.startAutomation()
     Runtime.getRuntime().addShutdownHook(Thread { runCatching { desktop.database.saveNow() } })
 
@@ -94,14 +132,15 @@ fun main(args: Array<String>) {
             title = "KAR Planner",
             icon = icon,
             state = windowState,
+            onPreviewKeyEvent = { e -> shortcut(e)?.let { vm.command(it); true } ?: false },
         ) {
             val base = LocalDensity.current
             BoxWithConstraints(Modifier.fillMaxSize()) {
-                val w = maxWidth.value.toInt()
-                val h = maxHeight.value.toInt()
+                val w = (maxWidth.value / DESKTOP_UI_SCALE).toInt()
+                val h = (maxHeight.value / DESKTOP_UI_SCALE).toInt()
                 CompositionLocalProvider(
                     LocalConfiguration provides Configuration(w, h),
-                    LocalDensity provides Density(base.density, base.fontScale * DESKTOP_FONT_SCALE),
+                    LocalDensity provides Density(base.density * DESKTOP_UI_SCALE, base.fontScale * DESKTOP_FONT_SCALE),
                 ) {
                     KarTheme {
                         KarPlannerApp(vm = vm, app = desktop, openRemindersSignal = openReminders)

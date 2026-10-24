@@ -19,6 +19,11 @@ sealed interface Screen {
     data object Settings : Screen
     /** Desktop only: Outlook e-mails waiting for review. */
     data object Emails : Screen
+    /** Desktop only: home dashboard, Kanban board, table view and templates. */
+    data object Dashboard : Screen
+    data object Board : Screen
+    data object Table : Screen
+    data object Templates : Screen
     /** Review page for one person; [name] is null for "Unassigned". */
     data class Person(val name: String?) : Screen
     data class Project(val id: String) : Screen

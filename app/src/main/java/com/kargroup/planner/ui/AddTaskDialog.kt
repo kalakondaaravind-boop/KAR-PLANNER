@@ -552,7 +552,7 @@ fun AddTaskDialog(
 
                 if (base != null && history.isNotEmpty()) {
                     Spacer(Modifier.height(14.dp))
-                    Surface(color = Color.White, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, KarColors.Border)) {
+                    Surface(color = KarColors.Card, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, KarColors.Border)) {
                         Column(Modifier.padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.History, null, tint = KarColors.SkyDeep, modifier = Modifier.size(18.dp))
@@ -607,7 +607,7 @@ fun AddTaskDialog(
         val tState = rememberTimePickerState(initialHour = parsed.hour, initialMinute = parsed.minute, is24Hour = false)
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
-            containerColor = Color.White,
+            containerColor = KarColors.Card,
             title = { Text("Target time (IST)") },
             text = { TimePicker(state = tState) },
             confirmButton = {
@@ -687,7 +687,7 @@ private fun SubtaskEditorRow(
             modifier = m,
         )
     }
-    Surface(color = Color.White, shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, KarColors.Border)) {
+    Surface(color = KarColors.Card, shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, KarColors.Border)) {
         if (wide) {
             Row(Modifier.padding(start = 10.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 titleField(Modifier.weight(1.5f))

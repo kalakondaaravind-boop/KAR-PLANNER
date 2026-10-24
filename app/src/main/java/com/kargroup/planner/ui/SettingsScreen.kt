@@ -321,7 +321,7 @@ fun SettingsScreen(
         val state = rememberTimePickerState(initialHour = (current / 60) % 24, initialMinute = current % 60, is24Hour = false)
         AlertDialog(
             onDismissRequest = { editTime = null },
-            containerColor = Color.White,
+            containerColor = KarColors.Card,
             title = {
                 Text(
                     when (field) {

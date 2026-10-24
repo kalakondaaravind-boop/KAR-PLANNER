@@ -283,7 +283,7 @@ fun CelebrationOverlay(celebration: Celebration, onDone: () -> Unit) {
                             Modifier.size(92.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.28f)),
                         )
                         Box(
-                            Modifier.size(74.dp).clip(CircleShape).background(Color.White),
+                            Modifier.size(74.dp).clip(CircleShape).background(KarColors.Card),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(celebration.emoji, fontSize = 40.sp, modifier = Modifier.rotate(wobble))
