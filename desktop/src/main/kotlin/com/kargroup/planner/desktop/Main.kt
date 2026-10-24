@@ -40,10 +40,10 @@ import androidx.compose.ui.input.key.type
 
 /**
  * Desktop sizing: the whole layout is drawn at 90% (denser, like Outlook / Excel) and text ends
- * up at about 80% of the Windows default (the shared theme itself draws text at 75%).
+ * up at about 60% of the Windows default (the shared theme itself draws text at 75%).
  */
 internal const val DESKTOP_UI_SCALE = 0.90f
-internal const val DESKTOP_FONT_SCALE = 0.80f / (0.75f * DESKTOP_UI_SCALE)
+internal const val DESKTOP_FONT_SCALE = 0.60f / (0.75f * DESKTOP_UI_SCALE)
 
 /** Ctrl + key → command. */
 private fun shortcut(e: KeyEvent): DesktopCommand? {
