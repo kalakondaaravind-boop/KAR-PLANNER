@@ -127,6 +127,20 @@ fun main(args: Array<String>) {
         val all = listOf(p1, a1, a2, p2, b1, b2, b3, b4, p3, c1, c2)
         app.plans.saveTasks(PlanCalc.baseline(all).map { if (it.id == b2.id) it.copy(start = PlanCalc.nextWorking(today.minusDays(1), s).toString(), finish = PlanCalc.finishFor(today.minusDays(1), 6, s).toString()) else if (it.id == a2.id) it.copy(percent = 80) else it })
     }
+    // Commercials tracker sample
+    run {
+        val st = app.commercials
+        st.saveColumn(CommercialColumn(id = "remarks", name = "Remarks", type = ColType.TEXT, width = 200))
+        fun r(c: String, p: String, l: String, f: String, rt: String, pr: String, cs: String, g: String, s: String, rm: String = "") =
+            st.addRow(mapOf("client" to c, "process" to p, "location" to l, "fte" to f, "rate" to rt, "prob" to pr, "consultant" to cs,
+                "golive" to g, "status" to s, "remarks" to rm).filterValues { it.isNotBlank() })
+        r("CHOLAMANDALAM", "FTE", "MUMBAI-A8", "10", "35000", "10", "No", "TBD", "On Hold", "AWAITING BUDGET APPROVAL")
+        r("BAJAJ FINSERV", "COLLECTIONS", "PUNE", "25", "32000", "90", "No", d(12), "Won", "LOI RECEIVED")
+        r("TATA AIG", "CLAIMS PROCESSING", "MUMBAI-A8", "15", "38000", "60", "Yes", d(30), "Commercials shared")
+        r("HDFC ERGO", "FTE", "NAVI MUMBAI", "8", "36000", "30", "No", "TBD", "Received", "RFP RECEIVED")
+        r("ICICI LOMBARD", "BACK OFFICE", "THANE", "12", "34000", "0", "Yes", d(-20), "Lost", "PRICE")
+        r("SBI CARDS", "CUSTOMER SUPPORT", "MUMBAI-A8", "40", "30000", "75", "No", d(45), "Commercials shared")
+    }
     var vm: MainViewModel? = null
     SwingUtilities.invokeAndWait { vm = MainViewModel(app).also { it.reminderPopupShown = true } }
     Thread.sleep(1500)
@@ -150,6 +164,8 @@ fun main(args: Array<String>) {
         "screen-15-special-sheet" to Screen.Tracker,
         "screen-16-special-workload" to Screen.Tracker,
         "screen-17-special-gantt-dark" to Screen.Tracker,
+        "screen-18-commercials" to Screen.Commercials,
+        "screen-19-commercials-dark" to Screen.Commercials,
     ).forEach { (name, screen) ->
         val pid = app.plans.projects.value.firstOrNull { it.name.startsWith("MINIMUM") }?.id
         com.kargroup.planner.ui.PlanScreenState.projectId = if (name.contains("portfolio")) null else pid

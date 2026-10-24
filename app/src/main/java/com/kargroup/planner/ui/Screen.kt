@@ -26,6 +26,8 @@ sealed interface Screen {
     data object Templates : Screen
     /** Desktop only: Special Projects planner (portfolio, Gantt, task sheet, workload). */
     data object Tracker : Screen
+    /** Desktop only: commercials tracker (table with custom columns). */
+    data object Commercials : Screen
     /** Review page for one person; [name] is null for "Unassigned". */
     data class Person(val name: String?) : Screen
     data class Project(val id: String) : Screen

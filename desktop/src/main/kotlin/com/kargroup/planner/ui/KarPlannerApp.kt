@@ -294,7 +294,7 @@ fun KarPlannerApp(vm: MainViewModel, app: DesktopApp, openRemindersSignal: Int =
             floatingActionButton = {
                 if (!wide && screen != Screen.Meetings && screen != Screen.Projects && screen != Screen.Journal && screen != Screen.People &&
                     screen != Screen.Reports && screen != Screen.Search && screen != Screen.Settings && screen != Screen.Emails &&
-                    screen != Screen.Dashboard && screen != Screen.Board && screen != Screen.Table && screen != Screen.Templates && screen != Screen.Tracker
+                    screen != Screen.Dashboard && screen != Screen.Board && screen != Screen.Table && screen != Screen.Templates && screen != Screen.Tracker && screen != Screen.Commercials
                 ) {
                     ExtendedFloatingActionButton(
                         onClick = openAddActivity,
@@ -468,6 +468,7 @@ fun KarPlannerApp(vm: MainViewModel, app: DesktopApp, openRemindersSignal: Int =
                     Screen.Tracker -> SpecialProjectsScreen(
                         store = app.plans, persons = persons, settings = settings, onMessage = { vm.toast(it) },
                     )
+                    Screen.Commercials -> CommercialsScreen(store = app.commercials, onMessage = { vm.toast(it) })
                     Screen.Templates -> TemplatesScreen(
                         activities = activityTemplates,
                         meetings = meetingTemplates,
@@ -908,6 +909,7 @@ fun screenTitle(screen: Screen, projects: Map<String, ProjectEntity>, contexts: 
     Screen.Table -> "Table"
     Screen.Templates -> "Templates & Tags"
     Screen.Tracker -> "Special Projects"
+    Screen.Commercials -> "Commercials Tracker"
     is Screen.Person -> screen.name ?: "Unassigned"
 }
 
