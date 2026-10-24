@@ -80,8 +80,8 @@ object EmailComposer {
         else -> "NOT STARTED"
     }
 
-    private fun page(title: String, subtitle: String, body: String, es: EmailSettings): String {
-        val sign = buildString {
+    private fun page(title: String, subtitle: String, body: String, es: EmailSettings, signed: Boolean = true): String {
+        val sign = if (!signed) "" else buildString {
             append("<p style=\"margin:24px 0 0 0;font-size:13px;color:$NAVY\">REGARDS,<br><b>")
             append(u(es.myName.ifBlank { "KAR PLANNER" }))
             append("</b>")
@@ -313,7 +313,7 @@ SENT FROM KAR PLANNER · ${u(Ist.formatStamp(System.currentTimeMillis()))} IST
             key = "digest:$todayStr",
             to = es.myEmail,
             subject = "KAR PLANNER – MY DAY – ${Ist.formatFull(todayStr).uppercase()} (${overdue.size} OVERDUE · ${dueToday.size} DUE TODAY)",
-            html = page("My day", Ist.formatFull(todayStr), body, es.copy(signature = "")),
+            html = page("My day", Ist.formatFull(todayStr), body, es, signed = false),
             summary = "${todays.size} SCHEDULED · ${meetingsToday.size} MEETINGS · ${overdue.size} OVERDUE",
             warnings = if (es.myEmail.isBlank()) listOf("SET YOUR E-MAIL IN SETTINGS → E-MAIL & OUTLOOK") else emptyList(),
         )

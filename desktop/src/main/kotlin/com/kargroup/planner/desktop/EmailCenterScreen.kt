@@ -107,7 +107,7 @@ fun EmailCenterScreen(
     val scope = rememberCoroutineScope()
 
     // New drafts are selected by default; removed ones drop out of the selection.
-    var known by remember { mutableStateOf(queue.map { it.id }.toSet()) }
+    var known by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(queue) {
         val ids = queue.map { it.id }.toSet()
         selected = (selected intersect ids) + (ids - known)
@@ -249,7 +249,10 @@ fun EmailCenterScreen(
                     }
                 }
             }
-            items(queue.sortedByDescending { it.createdAt }, key = { it.id }) { d ->
+            items(
+                queue.sortedWith(compareBy<EmailDraft>({ listOf(EmailKind.MOM, EmailKind.DIGEST, EmailKind.REMINDER, EmailKind.WEEKLY).indexOf(it.kind).let { i -> if (i < 0) 9 else i } }, { -it.createdAt })),
+                key = { it.id },
+            ) { d ->
                 DraftCard(
                     d = d,
                     checked = d.id in selected,
