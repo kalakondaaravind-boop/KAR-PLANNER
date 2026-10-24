@@ -787,11 +787,10 @@ private fun Slicer(label: String, options: List<Pair<String, String>>, selected:
 
 @Composable
 private fun SliceChip(label: String, on: Boolean, onClick: () -> Unit) {
-    Surface(onClick = onClick, color = if (on) KarColors.SkyDeep else KarColors.SkyWash, shape = RoundedCornerShape(6.dp),
-        border = BorderStroke(1.dp, if (on) KarColors.SkyDeep else KarColors.Border)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = if (on) Color.White else KarColors.Ink,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
-    }
+    Text(label, style = MaterialTheme.typography.labelSmall, color = if (on) Color.White else KarColors.Ink,
+        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(if (on) KarColors.SkyDeep else KarColors.SkyWash)
+            .border(1.dp, if (on) KarColors.SkyDeep else KarColors.Border, RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 5.dp))
 }
 
 @Composable
