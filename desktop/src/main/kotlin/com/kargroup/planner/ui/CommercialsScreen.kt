@@ -556,13 +556,15 @@ private fun CommercialRowDialog(row: CommercialRow, columns: List<CommercialColu
                             DateBox(c.name, iso, { d -> values = if (d == null) values - c.id else values + (c.id to d) }, Modifier.width(220.dp))
                             PillChip("TBD", values[c.id].equals("TBD", true)) { values = values + (c.id to "TBD") }
                         }
-                        else -> OutlinedTextField(
-                            value = values[c.id].orEmpty().let { v -> if (ColType.numeric(c.type)) Commercials.number(v)?.let { n -> if (n % 1.0 == 0.0) n.toLong().toString() else n.toString() } ?: v else v },
+                        else -> Column {
+                        OutlinedTextField(
+                            value = values[c.id].orEmpty(),
                             onValueChange = { v -> values = values + (c.id to v) },
                             singleLine = true, modifier = Modifier.fillMaxWidth(),
                         )
                         if (ColType.numeric(c.type) && values[c.id].orEmpty().isNotBlank()) Text(Commercials.display(preview, c, byId),
                             style = MaterialTheme.typography.labelSmall, color = KarColors.Slate, modifier = Modifier.padding(top = 2.dp))
+                        }
                     }
                 }
             }
