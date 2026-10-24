@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -95,7 +96,9 @@ import com.kargroup.planner.desktop.ColType
 import com.kargroup.planner.desktop.CommercialColumn
 import com.kargroup.planner.desktop.CommercialRow
 import com.kargroup.planner.desktop.CommercialStore
+import com.kargroup.planner.desktop.CommercialImport
 import com.kargroup.planner.desktop.Commercials
+import com.kargroup.planner.desktop.UploadTable
 import com.kargroup.planner.desktop.FileDialogs
 import com.kargroup.planner.ui.components.DepthCard
 import com.kargroup.planner.ui.components.OutlinedTextField
@@ -151,6 +154,7 @@ fun CommercialsScreen(store: CommercialStore, onMessage: (String) -> Unit) {
     var columnDialog by remember { mutableStateOf<CommercialColumn?>(null) }
     var manageColumns by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<CommercialRow?>(null) }
+    var upload by remember { mutableStateOf<UploadTable?>(null) }
 
     val filtered = rows.sortedBy { it.order }
         .filter { r -> statusFilter == null || (statusCol != null && (r.values[statusCol.id] ?: "").equals(statusFilter, true)) || (statusFilter == "" && statusCol != null && r.values[statusCol.id].isNullOrBlank()) }
@@ -192,6 +196,14 @@ fun CommercialsScreen(store: CommercialStore, onMessage: (String) -> Unit) {
                 Text("All client commercials in one table. Click a cell to type; Tab / Enter move like Excel.",
                     style = MaterialTheme.typography.bodySmall, color = KarColors.Slate)
             }
+            ToolButton("Bulk upload", Icons.Outlined.UploadFile) {
+                FileDialogs.openAny("Bulk upload commercials (Excel or CSV)", listOf("xlsx", "xlsm", "csv"))?.let { f ->
+                    runCatching { CommercialImport.read(f) }
+                        .onSuccess { if (it.rows.isEmpty()) onMessage("No data rows found in ${f.name}") else upload = it }
+                        .onFailure { onMessage("Could not read ${f.name}: ${it.message}") }
+                }
+            }
+            Spacer(Modifier.width(6.dp))
             ToolButton("Columns", Icons.Outlined.ViewColumn) { manageColumns = true }
             Spacer(Modifier.width(6.dp))
             ToolButton("Add column", Icons.Outlined.Add) { columnDialog = CommercialColumn(id = "", name = "") }
@@ -368,6 +380,19 @@ fun CommercialsScreen(store: CommercialStore, onMessage: (String) -> Unit) {
         CommercialColumnDialog(c, columns, onDismiss = { columnDialog = null },
             onSave = { col -> store.saveColumn(if (col.id.isBlank()) col.copy(id = java.util.UUID.randomUUID().toString()) else col); columnDialog = null; onMessage("Column saved") },
             onDelete = if (c.id.isBlank()) null else ({ store.deleteColumn(c.id); columnDialog = null; onMessage("Column deleted") }))
+    }
+    upload?.let { t ->
+        BulkUploadDialog(t, columns, onDismiss = { upload = null }, onTemplate = {
+            FileDialogs.save("Save upload template", "KAR-Commercials-template.csv")?.let { f ->
+                runCatching { f.writeText(CommercialImport.template(columns), Charsets.UTF_8) }
+                    .onSuccess { onMessage("Template saved — fill it in Excel and upload") }
+                    .onFailure { onMessage("Could not save: ${it.message}") }
+            }
+        }) { newCols, data, replace, keys ->
+            val (added, updated) = store.importRows(newCols, data, replace, keys)
+            upload = null; statusFilter = null; query = ""; sort = null
+            onMessage("Uploaded: $added added" + (if (updated > 0) ", $updated updated" else "") + (if (newCols.isNotEmpty()) ", ${newCols.size} new column(s)" else ""))
+        }
     }
     if (manageColumns) {
         ManageColumnsDialog(columns, store, onEdit = { columnDialog = it }, onAdd = { columnDialog = CommercialColumn(id = "", name = "") },
@@ -796,5 +821,125 @@ private fun ManageColumnsDialog(columns: List<CommercialColumn>, store: Commerci
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
         dismissButton = { TextButton(onClick = onAdd) { Text("Add column") } },
+    )
+}
+
+
+// =============================================================================
+// Bulk upload
+// =============================================================================
+
+private const val SKIP = "__skip"
+private const val NEW = "__new"
+
+private fun guessType(values: List<String>): String {
+    val v = values.filter { it.isNotBlank() }
+    if (v.isEmpty()) return ColType.TEXT
+    return when {
+        v.all { it.trim().endsWith("%") && Commercials.number(it) != null } -> ColType.PERCENT
+        v.all { it.contains("₹") || it.startsWith("Rs", true) } && v.all { Commercials.number(it) != null } -> ColType.CURRENCY
+        v.all { Commercials.number(it) != null } -> ColType.NUMBER
+        v.all { Commercials.parseDate(it) != null || it.equals("TBD", true) } && v.any { Commercials.parseDate(it) != null } -> ColType.DATE
+        v.all { it.equals("yes", true) || it.equals("no", true) || it.equals("y", true) || it.equals("n", true) } -> ColType.YESNO
+        else -> ColType.TEXT
+    }
+}
+
+@Composable
+private fun BulkUploadDialog(
+    table: UploadTable,
+    columns: List<CommercialColumn>,
+    onDismiss: () -> Unit,
+    onTemplate: () -> Unit,
+    onImport: (newColumns: List<CommercialColumn>, rows: List<Map<String, String>>, replace: Boolean, matchKeys: List<String>) -> Unit,
+) {
+    val byId = columns.associateBy { it.id }
+    var mapping by remember {
+        mutableStateOf(CommercialImport.autoMatch(table.headers, columns).mapIndexed { i, id ->
+            when {
+                id != null && byId[id]?.type == ColType.FORMULA -> SKIP          // calculated in the tracker
+                id != null -> id
+                table.rows.all { it[i].isBlank() } -> SKIP
+                else -> NEW
+            }
+        })
+    }
+    var replace by remember { mutableStateOf(false) }
+    val keyCols = listOf("client", "process", "location").filter { id -> byId.containsKey(id) }
+    var update by remember { mutableStateOf(true) }
+    val targets = listOf(SKIP to "— Skip —", NEW to "+ Add as new column") + columns.filter { it.type != ColType.FORMULA }.map { it.id to it.name.uppercase() }
+
+    // build the result (new columns get fresh ids)
+    fun build(): Triple<List<CommercialColumn>, List<Map<String, String>>, List<String>> {
+        val newCols = HashMap<Int, CommercialColumn>()
+        mapping.forEachIndexed { i, m ->
+            if (m == NEW) newCols[i] = CommercialColumn(name = table.headers[i], type = guessType(table.rows.map { it[i] }), width = 130)
+        }
+        val target = mapping.mapIndexed { i, m -> when (m) { SKIP -> null; NEW -> newCols[i]; else -> byId[m] } }
+        val data = table.rows.map { r ->
+            buildMap {
+                target.forEachIndexed { i, c -> if (c != null) CommercialImport.convert(c, r[i]).takeIf { it.isNotBlank() }?.let { put(c.id, it) } }
+            }
+        }.filter { it.isNotEmpty() }
+        return Triple(newCols.values.toList(), data, if (update && !replace) keyCols.filter { k -> mapping.contains(k) } else emptyList())
+    }
+    val preview = build()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = KarColors.Card,
+        title = { Text("Bulk upload commercials") },
+        text = {
+            Column(Modifier.widthIn(min = 640.dp).verticalScroll(rememberScrollState())) {
+                Text("${table.source} · ${table.rows.size} rows · ${table.headers.size} columns", style = MaterialTheme.typography.bodySmall, color = KarColors.Slate)
+                Text("Check where each column of your file goes. Monthly Revenue is calculated by the tracker, so it is skipped.",
+                    style = MaterialTheme.typography.labelSmall, color = KarColors.SlateLight, modifier = Modifier.padding(top = 2.dp, bottom = 6.dp))
+                Row(Modifier.fillMaxWidth().background(KarColors.SkyWash).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text("Column in your file", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = KarColors.Slate, modifier = Modifier.weight(1.2f))
+                    Text("Sample", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = KarColors.Slate, modifier = Modifier.weight(1f))
+                    Text("Goes to", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = KarColors.Slate, modifier = Modifier.weight(1.3f))
+                }
+                table.headers.forEachIndexed { i, h ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(h, style = MaterialTheme.typography.labelMedium, color = KarColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1.2f))
+                        Text(table.rows.firstOrNull { it[i].isNotBlank() }?.get(i).orEmpty(), style = MaterialTheme.typography.labelSmall, color = KarColors.Slate,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(end = 8.dp))
+                        Box(Modifier.weight(1.3f)) {
+                            SmallMenu(mapping[i], targets) { v ->
+                                // a tracker column can take only one file column
+                                mapping = mapping.mapIndexed { j, m -> if (j == i) v else if (m == v && v != SKIP && v != NEW) SKIP else m }
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = KarColors.Border.copy(alpha = 0.5f))
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Replace all existing rows (otherwise rows are added)", style = MaterialTheme.typography.bodySmall, color = if (replace) KarColors.Red else KarColors.Ink, modifier = Modifier.weight(1f))
+                    Switch(checked = replace, onCheckedChange = { replace = it }, colors = SwitchDefaults.colors(checkedTrackColor = KarColors.Red))
+                }
+                if (!replace && keyCols.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Update a row that already has the same " + keyCols.joinToString(" + ") { byId[it]?.name ?: it } + " instead of adding a duplicate",
+                        style = MaterialTheme.typography.bodySmall, color = KarColors.Ink, modifier = Modifier.weight(1f))
+                    Switch(checked = update, onCheckedChange = { update = it }, colors = SwitchDefaults.colors(checkedTrackColor = KarColors.SkyDeep))
+                }
+                val newCount = mapping.count { it == NEW }
+                Text("${preview.second.size} rows will be uploaded" + (if (newCount > 0) " · $newCount new column(s) will be added" else ""),
+                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = KarColors.Navy, modifier = Modifier.padding(top = 8.dp))
+                Text("Tip: use “Download template” to get a sheet with the tracker's columns.", style = MaterialTheme.typography.labelSmall, color = KarColors.SlateLight,
+                    modifier = Modifier.padding(top = 2.dp))
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = preview.second.isNotEmpty(), onClick = { val (c, d, k) = build(); onImport(c, d, replace, k) }) {
+                Text("Upload ${preview.second.size} rows")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onTemplate) { Text("Download template") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
     )
 }

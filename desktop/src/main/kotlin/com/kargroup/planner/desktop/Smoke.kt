@@ -141,6 +141,24 @@ fun main(args: Array<String>) {
         r("ICICI LOMBARD", "BACK OFFICE", "THANE", "12", "34000", "0", "Yes", d(-20), "Lost", "PRICE")
         r("SBI CARDS", "CUSTOMER SUPPORT", "MUMBAI-A8", "40", "30000", "75", "No", d(45), "Commercials shared")
     }
+    // Bulk upload check (Excel file with a title row, formula, % and date cells, an extra column)
+    run {
+        val f = File("smoke-data/upload-sample.xlsx")
+        if (f.exists()) {
+            val t = CommercialImport.read(f)
+            val cols = app.commercials.columns.value
+            val byId = cols.associateBy { it.id }
+            val m = CommercialImport.autoMatch(t.headers, cols)
+            val newCols = HashMap<Int, CommercialColumn>()
+            m.forEachIndexed { i, id -> if (id == null) newCols[i] = CommercialColumn(name = t.headers[i]) }
+            val target = m.mapIndexed { i, id -> if (id != null && byId[id]?.type == ColType.FORMULA) null else id?.let { byId[it] } ?: newCols[i] }
+            val data = t.rows.map { r -> buildMap { target.forEachIndexed { i, c -> if (c != null) CommercialImport.convert(c, r[i]).takeIf { it.isNotBlank() }?.let { put(c.id, it) } } } }
+            val res = app.commercials.importRows(newCols.values.toList(), data, false, listOf("client", "process", "location"))
+            val report = "headers=${t.headers}\nrows=${t.rows}\nmatch=$m\ndata=$data\nresult(added,updated)=$res\n"
+            File(out, "upload-result.txt").writeText(report)
+            println("SMOKE: upload $res")
+        }
+    }
     var vm: MainViewModel? = null
     SwingUtilities.invokeAndWait { vm = MainViewModel(app).also { it.reminderPopupShown = true } }
     Thread.sleep(1500)

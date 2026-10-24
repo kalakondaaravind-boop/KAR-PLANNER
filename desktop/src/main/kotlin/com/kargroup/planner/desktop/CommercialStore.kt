@@ -151,6 +151,34 @@ class CommercialStore(private val file: File = File(AppDirs.root, "commercials.j
 
     fun setRows(rows: List<CommercialRow>) { _rows.value = rows; save() }
 
+    /**
+     * Bulk upload: adds [newColumns], then the [incoming] rows (column id → stored value).
+     * [replace] removes all current rows first; [matchKeys] (column ids) update an existing row with the same values instead of adding a duplicate.
+     * Returns (added, updated).
+     */
+    fun importRows(newColumns: List<CommercialColumn>, incoming: List<Map<String, String>>, replace: Boolean, matchKeys: List<String>): Pair<Int, Int> {
+        _columns.value = _columns.value + newColumns
+        var list = if (replace) emptyList() else _rows.value
+        var order = (list.maxOfOrNull { it.order } ?: 0.0)
+        var added = 0; var updated = 0
+        fun keyOf(v: Map<String, String>) = matchKeys.joinToString("|") { (v[it] ?: "").trim().lowercase() }
+        incoming.forEach { v ->
+            val k = keyOf(v)
+            val i = if (matchKeys.isEmpty() || k.replace("|", "").isBlank()) -1 else list.indexOfFirst { keyOf(it.values) == k }
+            if (i >= 0) {
+                val old = list[i]
+                list = list.toMutableList().also { it[i] = old.copy(values = old.values + v, updatedAt = System.currentTimeMillis()) }
+                updated++
+            } else {
+                order += 1
+                list = list + CommercialRow(values = v, order = order)
+                added++
+            }
+        }
+        _rows.value = list; save()
+        return added to updated
+    }
+
     // ---------------------------------------------------------------- columns
     fun saveColumn(col: CommercialColumn, afterId: String? = null) {
         val list = _columns.value.toMutableList()
